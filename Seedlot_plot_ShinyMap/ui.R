@@ -9,9 +9,55 @@ library(waiter) # loading sign reactively
 setwd("~/Uni/Doctorate/Samples/Seedlot_plot_data/")
 LoadedinData <- read.csv("data/final_seedloty_plot.csv")
 
+
+fluidPage(
+  useWaiter(),  # Loading spinner
+  titlePanel("Assayed Seedlots"),
+  tabsetPanel(id = "tabs",
+              
+              ## Information page
+           tabPanel("Information on plots",
+                    fluidPage(
+                      titlePanel("A short How To:"),
+                      
+                      sidebarPanel(p("Insert nav, keywords, definitions")),
+                      
+                      mainPanel(
+                        h3("Introduction", style = "text-align:center;"),
+                        br(),hr(),br(),
+                        
+                        p("Introduction on MR, use, seed lot, resistance"),
+                        p("Choose area of study, select seed lots"),
+                        br(),hr(),br(),
+                        
+                        h3("Seed lot information", style = "text-align:center;"),
+                        p("Information on what the different levels of resistance means and measurement"),
+                        p("Drop down toggle on more information"),
+                        br(),hr(),br(),
+                        
+                        h3("Considerations when selecting seedlots", style = "text-align:center;"),
+                        p("Amount of seedlings, genetic diversity, seed lot reserves, age of seed lot, Resistance needed"),
+                        p("Drop down toggle on more information of GD, include FsT plot")
+                        # p("p creates a paragraph of text."),
+                        # p("A new p() command starts a new paragraph. Supply a style attribute to change the format of the entire paragraph.", style = "font-family: 'times'; font-si16pt"),
+                        # strong("strong() makes bold text."),
+                        # em("em() creates italicized (i.e, emphasized) text."),
+                        # br(),
+                        # code("code displays your text similar to computer code"),
+                        # div("div creates segments of text with a similar style. This division of text is all blue because I passed the argument 'style = color:blue' to div", style = "color:blue"),
+                        # br(),
+                        # p("span does the same thing as div, but it works with",
+                        #   span("groups of words", style = "color:blue"),
+                        #   "that appear inside a paragraph.")
+                      )
+                    )
+           ),
+## Main Tab
+tabPanel("Seed lot map",
+
 fluidPage(
   useWaiter(), # loading symbol
-  titlePanel("Melaleuca quinquenervia assayed seedlots"),
+  titlePanel("Melaleuca quinquenervia assayed seed lots"),
   
   sidebarLayout(
     sidebarPanel(
@@ -98,4 +144,6 @@ fluidPage(
     )
   )
 )
- 
+)
+  )
+)
