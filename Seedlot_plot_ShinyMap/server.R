@@ -1,32 +1,62 @@
+library(tidyverse) # data wrangling
+library(raster) # Map
+library(sf) # Map
+library(shiny) # shiny base package
+library(shinycssloaders) # load symbol
+library(leaflet) # Map
+library(shinyBS) # layout
+library(waiter) # loading sign reactively
+
+setwd("~/Uni/Doctorate/Samples/Seedlot_plot_data/")
+
+# Load in datasets used
+LoadedinData <- read.csv("data/final_seedloty_plot.csv")
+# Load current projection data
+maxent_MQuin <- raster("data/maxent_MQuin.tiff")
+maxent_MR <- raster("data/maxent_MR.tiff")
+maxent_intersection <- raster("data/maxent_intersection.tiff")
+maxent_studyarea <- st_read("data/maxent_studyarea.gpkg")
+
+# Palettes 
+# For seedlots based on severity - actively shifts based on observed data
+MR_Sev_pal <- colorNumeric(
+  palette = "YlOrRd",  # Yellow → Orange → Red
+  domain = LoadedinData$Mean_seedling_score_rustassay,
+  na.color = "gray50"
+)
+
+# For SDMs
+pal_mr <- colorRampPalette(c("grey95","#C6DC96","#C6DC96","darkolivegreen","yellow"))
+pal_mq <- colorRampPalette(c("grey95","#EAC8BF","#EAC8BF","orange","forestgreen"))
+pal_int <- colorRampPalette(c("grey95","#C6DC96","#C6DC96","#45B055","#4870BD", "deeppink4"))
 
 
-library(shiny)
-library(shinycssloaders)
-LoadedinData <- read.csv("~/Uni/Doctorate/Samples/Seedlot_plot_data/final_seedloty_plot.csv")
+############################################################################################
 
 function(input, output, session) {
   # Render initial map
   output$map <- renderLeaflet({
     leaflet() %>%
       setView(lng=151.20990, lat=-33.865143, zoom=8) %>% 
-      addProviderTiles(providers$CartoDB.Positron)
+      addProviderTiles(providers$CartoDB.Positron) 
   })
   
   # Filter seedlots based on input filters
   filtered_data <- reactive({
     data <- LoadedinData
-     # Apply rust filter only if checkbox is TRUE
-     if (input$filter_rust) {
-       data <- data %>%
-         filter(Mean_seedling_score_rustassay >= as.numeric(input$rustFilter[1]),
-                Mean_seedling_score_rustassay <= as.numeric(input$rustFilter[2]))
-     }
     
-     if (input$filter_geno) {
-       data <- data %>%
-         filter(Mean_seedling_score_genompred >= as.numeric(input$genoFilter[1]),
-                Mean_seedling_score_genompred <= as.numeric(input$genoFilter[2]))
-     }
+    # Apply rust filter only if checkbox is TRUE
+    if (input$filter_rust) {
+      data <- data %>% 
+        filter(Mean_seedling_score_rustassay >= as.numeric(input$rustFilter[1]),
+               Mean_seedling_score_rustassay <= as.numeric(input$rustFilter[2]))
+    }
+    
+    if (input$filter_geno) {
+      data <- data %>%
+        filter(Mean_seedling_score_genompred >= as.numeric(input$genoFilter[1]),
+               Mean_seedling_score_genompred <= as.numeric(input$genoFilter[2]))
+    }
     
     if (input$filter_geno_pres) {
       data <- data %>%
@@ -41,24 +71,18 @@ function(input, output, session) {
     if (input$filter_seedling_numb) {
       data <- data %>%
         filter(Seedling_number_rustassay >= as.numeric(input$seedlNumbFilter[1]) & 
-               Seedling_number_rustassay <= as.numeric(input$seedlNumbFilter[2]) |
+                 Seedling_number_rustassay <= as.numeric(input$seedlNumbFilter[2]) |
                  Seedling_number_genompred >= as.numeric(input$seedlNumbFilter[1]) & 
                  Seedling_number_genompred <= as.numeric(input$seedlNumbFilter[2]) )
     }
     
     data
   })
-    
+  
   observe({
     data <- filtered_data()
     
-    MR_Sev_pal <- colorNumeric(
-      palette = "YlOrRd",  # Yellow → Orange → Red
-      domain = LoadedinData$Mean_seedling_score_rustassay,
-      na.color = "gray50"
-    )
-  
-  # Create popup labels
+    # Create popup labels for seedlots
     popup_info <- paste0(
       "<b>Seedlot: </b>", data$Seedlot, "<br>",
       
@@ -80,13 +104,16 @@ function(input, output, session) {
       "</p>"
     )
     
-    MR_Sev_colors <- colorNumeric("YlOrRd", domain = LoadedinData$Mean_seedling_score_rustassay)
+    ### Loading in Map
     
     leafletProxy("map") %>%
+      ## Clean map to update reactively to changes
+      clearImages() %>%
       clearMarkers() %>%
       clearMarkerClusters() %>%
       clearControls() %>%
       
+      ## Seedlots
       addCircleMarkers(
         lng = data$longitude,
         lat = data$latitude,
@@ -96,10 +123,12 @@ function(input, output, session) {
         fillOpacity = 0.8,
         fillColor = MR_Sev_pal(data$Mean_seedling_score_rustassay),
         
+        ## Colouring in seedlots based on severity
         options = markerOptions(
           rust = data$Mean_seedling_score_rustassay  # pass custom variable here
         ),
         
+        ## JS for colouring based on rust in child clusters
         clusterOptions = markerClusterOptions( 
           spiderfyDistanceMultiplier=1.5,
           # Colour clusters
@@ -131,32 +160,57 @@ function(input, output, session) {
         }
         "),
           colors = MR_Sev_pal
-    
+          
         )
       )
+    
+    
+    ## Loading in rasters for SDM
+    if (input$overlay_SDM == 'show') {
+      # Loading symbol
+      w <- Waiter$new(html = spin_2(), color = "#FFFFFFAA")
+      w$show()
       
+      on.exit(w$hide())
+      
+      # Loading rasters
+      selected_raster <- switch(input$layer_curr,
+                                "MQuin" = maxent_MQuin,
+                                "MR" = maxent_MR,
+                                "Intersection" = maxent_intersection)
+      selected_palette <- switch(input$layer_curr,
+                                 "MQuin" = pal_mq(20),
+                                 "MR" = pal_mr(20),
+                                 "Intersection" = pal_int(20))
+      color_pal <- colorNumeric(palette = selected_palette, domain = values(selected_raster), na.color = "transparent")
+      
+      # Plotting rasters
+      leafletProxy("map") %>%
+        addRasterImage(selected_raster, colors = selected_palette, opacity = 0.5, group = input$layer_curr) %>% 
+        addLegend(position = "topright", pal = color_pal, values = values(selected_raster), title = "SDM value", group = input$layer_curr)
+    }
+    
     # Add legend on map
     if (nrow(data) > 1 && !all(is.na(data$Mean_seedling_score_rustassay))) {
       leafletProxy("map") %>%
-      addLegend(
-            position = "bottomright",
-            pal = MR_Sev_pal,
-            values = data$Mean_seedling_score_rustassay,
-            title = "Seedlot's mean rust assay score",
-            opacity = 1
-      )
+        addLegend(
+          position = "bottomright",
+          pal = MR_Sev_pal,
+          values = data$Mean_seedling_score_rustassay,
+          title = "Seedlot's mean rust assay score",
+          opacity = 1
+        ) 
     }
-  })
     
-
     ## Loading in the user input location
     observeEvent(input$go, {
       req(input$latitude); req(input$longitude)
       inp_latitude <- as.numeric(input$latitude)
       inp_longitude <- as.numeric(input$longitude)
-    
+      
       # Zoom map to location
       leafletProxy("map") %>% 
         flyToBounds(lng1 = inp_longitude-0.15, lng2 = inp_longitude+0.15, lat1 = inp_latitude-0.15, lat2 = inp_latitude+0.15, options = c(duration=0.3))
     })  
+  })
 }
