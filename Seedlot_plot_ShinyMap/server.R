@@ -6,6 +6,9 @@ library(shinycssloaders) # load symbol
 library(leaflet) # Map
 library(shinyBS) # layout
 library(waiter) # loading sign reactively
+library(shinyjs) # shiny java
+library(DT) # Render datatable
+library(shinyWidgets) # Confirmation messages 
 
 setwd("~/Uni/Doctorate/Samples/Seedlot_plot_data/")
 
@@ -35,6 +38,8 @@ pal_int <- colorRampPalette(c("grey95","#C6DC96","#C6DC96","#45B055","#4870BD", 
 
 function(input, output, session) {
   
+  
+  ######################################## Seed lot map plots (renders 'map')
   ########### Set initial render
   # Track the first visit to the tab 
   first_visit <- reactiveVal(TRUE) 
@@ -67,6 +72,7 @@ function(input, output, session) {
         addCircleMarkers(
           lng = data$longitude,
           lat = data$latitude,
+          layerId = data$Seedlot,
           popup = popup_info,
           stroke = FALSE,
           radius = 6,
@@ -260,7 +266,6 @@ function(input, output, session) {
     }
   })
     
-    
     ## Loading in rasters for SDM
     observe({
       req(input$overlay_SDM == "show")
@@ -306,5 +311,159 @@ function(input, output, session) {
       # Zoom map to location
       leafletProxy("map") %>% 
         flyToBounds(lng1 = inp_longitude-0.15, lng2 = inp_longitude+0.15, lat1 = inp_latitude-0.15, lat2 = inp_latitude+0.15, options = c(duration=0.3))
+    })
+    
+    ###########
+    ## Function: Select seedlots - Print clicked_marker in sidePanel with a button for "add to list". When pressed, add clicked_marker to selected_seedlots
+    last_clicked_marker <- reactiveValues(id = NULL, lat = NULL, lng = NULL)
+    
+    observeEvent(input$map_marker_click, {
+      clicked_marker <- input$map_marker_click
+      last_clicked_marker$id  <- clicked_marker$id
+    })
+    
+    # If not a marker pressed, hide button
+    observeEvent(input$map_click, {
+      last_clicked_marker$id  <- NULL
+    })
+    
+    # Show button only if a marker is clicked
+    output$click_info <- renderUI({
+      req(last_clicked_marker$id)
+      if (is.null(last_clicked_marker$id)) return(NULL)
+      tagList(
+        h4("Selected Marker"),
+        actionButton("add_seedlot", "Record seed lot")
+      )
+    })
+    
+    selected_seedlots <- reactiveValues(seedlot_ID = c())
+    
+    observeEvent(input$add_seedlot, {
+      req(last_clicked_marker$id)
+      
+      if (!last_clicked_marker$id %in% selected_seedlots$seedlot_ID) {
+        selected_seedlots$seedlot_ID  <- c(selected_seedlots$seedlot_ID,  last_clicked_marker$id)
+      }
+    })
+    
+    # Filter data reactively then plot - hide if 
+      # Hide table if nothing selected
+    
+    observe({
+      if (length(selected_seedlots$seedlot_ID) > 0) {
+        updateTextInput(session, "have_selection", value = "TRUE")
+      } else {
+        updateTextInput(session, "have_selection", value = "FALSE")
+      }
+    })
+    
+    LoadedinData_rounded <- LoadedinData %>%
+      mutate_if(is.numeric, round, digits = 2)
+    
+    # Table for rust assay
+    selected_seedlot_data <- reactive({
+      req(selected_seedlots$seedlot_ID)
+      selected_seedlot_data <- LoadedinData_rounded %>% 
+        filter(Seedlot %in% selected_seedlots$seedlot_ID) %>% 
+        select(Seedlot, latitude, longitude, Seedling_number_rustassay,	Mean_seedling_score_rustassay, Sd_seedling_score_rustassay) %>% 
+        unique()
+      colnames(selected_seedlot_data) <- c("Seed lot", "Latitude collected", "Longitude collected", "Number of seedlings scored", "Mean seedling score", "Seedling score SD")
+      selected_seedlot_data
+    })
+    
+    output$marker_table_1 <- renderDT({
+      datatable(
+        selected_seedlot_data(),
+        selection = "single",   # single row click
+        rownames = FALSE,
+        options = list(
+          paging = FALSE,
+          searching = FALSE,
+          ordering = FALSE
+        )
+      )
+    })
+    
+    # Remove seedlot when clicked - DF 1
+    observeEvent(input$marker_table_1_rows_selected, {
+      selected_row <- input$marker_table_1_rows_selected
+      if (length(selected_row)) {
+        seedlot_to_remove <- selected_seedlot_data()[selected_row, "Seed lot"]
+        
+        confirmSweetAlert(
+          session = session,
+          inputId = "confirm_remove",
+          title = "Remove Seedlot?",
+          text = paste("Removing recorded seed lot: ", seedlot_to_remove),
+          type = "question",
+          btn_labels = c("Cancel", "Remove"),
+          closeOnClickOutside = TRUE,
+          showCloseButton = TRUE,
+          allowEscapeKey = TRUE,
+          btn_colors = c("grey70", "#D9344D"),
+          danger_mode = TRUE
+        )
+      }
+    })
+    
+    # Table for GP
+    selected_seedlot_data_2 <- reactive({
+      req(selected_seedlots$seedlot_ID)
+      selected_seedlot_data_2 <- LoadedinData_rounded %>% 
+        filter(Seedlot %in% selected_seedlots$seedlot_ID) %>% 
+        select(Seedlot, latitude, longitude,	MatLine_Genompred , Seedling_number_genompred, Mean_seedling_score_genompred, Sd_seedling_score_genompred) %>% 
+        unique()
+      colnames(selected_seedlot_data_2) <- c("Seed lot", "Latitude collected", "Longitude collected", "Maternal line score", "Number of seedlings scored", "Mean seedling score", "Seedling score SD")
+      selected_seedlot_data_2
+    })
+
+    output$marker_table_2 <- renderDT({
+      datatable(
+        selected_seedlot_data_2(),
+        selection = "single",   # single row click
+        rownames = FALSE,
+        options = list(
+          paging = FALSE,
+          searching = FALSE,
+          ordering = FALSE
+        )
+      )
+    })
+    
+    # Remove seedlot when clicked - DF 2
+    observeEvent(input$marker_table_2_rows_selected, {
+      selected_row <- input$marker_table_2_rows_selected
+      
+      if (length(selected_row)) {
+        seedlot_to_remove <- selected_seedlot_data_2()[selected_row, "Seed lot"]
+      
+        confirmSweetAlert(
+          session = session,
+          inputId = "confirm_remove",
+          title = "Remove Seedlot?",
+          text = paste("Removing recorded seed lot: ", seedlot_to_remove),
+          type = "question",
+          btn_labels = c("Cancel", "Remove"),
+          closeOnClickOutside = TRUE,
+          showCloseButton = TRUE,
+          allowEscapeKey = TRUE,
+          btn_colors = c("grey70", "#D9344D"),
+          danger_mode = TRUE
+        )
+      }
+    })
+    
+    observeEvent(input$confirm_remove, {
+      if (isTRUE(input$confirm_remove)) {
+        selected_row_1 <- input$marker_table_1_rows_selected
+        seedlot_to_remove_1 <- selected_seedlot_data()[selected_row_1, "Seed lot"]
+        
+        selected_row_2 <- input$marker_table_2_rows_selected
+        seedlot_to_remove_2 <- selected_seedlot_data()[selected_row_2, "Seed lot"]
+        
+        selected_seedlots$seedlot_ID <- setdiff(selected_seedlots$seedlot_ID, seedlot_to_remove_1)
+        selected_seedlots$seedlot_ID <- setdiff(selected_seedlots$seedlot_ID, seedlot_to_remove_2)
+      }
     })
 }

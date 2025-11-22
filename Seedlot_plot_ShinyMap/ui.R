@@ -5,6 +5,8 @@ library(shinycssloaders) # load symbol
 library(leaflet) # Map
 library(shinyBS) # layout
 library(waiter) # loading sign reactively
+library(DT) # Render datatable
+library(shinyjs)
 
 setwd("~/Uni/Doctorate/Samples/Seedlot_plot_data/")
 LoadedinData <- read.csv("data/final_seedloty_plot.csv")
@@ -24,8 +26,6 @@ fluidPage(
                       
                       mainPanel(
                         h3("Introduction", style = "text-align:center;"),
-                        br(),hr(),br(),
-                        
                         p("Introduction on MR, use, seed lot, resistance"),
                         p("Choose area of study, select seed lots"),
                         br(),hr(),br(),
@@ -132,15 +132,32 @@ fluidPage(
                     "Intersection" = "Intersection"),
         selected = "MQuin"
       )
-    )
     ),
-    
+    hr(),
+    uiOutput("click_info")
+    ),
     
     ## Main map
     mainPanel(
       withSpinner(color="grey60",
-                  leafletOutput("map", width = "100%", height = "90vh")
-      )
+                  leafletOutput("map", width = "100%", height = "70vh"),
+      ),
+      
+      ## Add table of selected seedlots
+      useShinyjs(),
+      hidden(textInput("have_selection", "sel", value = "FALSE")),
+      conditionalPanel(condition = "input.have_selection == 'TRUE'",
+                       br(),
+                       h3("Selected seed lots"),
+                       p("Click on seed lots to remove from selection"),
+                       br(),
+                       h4("Rust assay score of seed lots"),
+                       DTOutput("marker_table_1"),
+                       hr(),
+                       h4("Genomic prediction score of seed lots"),
+                       DTOutput("marker_table_2")
+                       )
+
     )
   )
 )
