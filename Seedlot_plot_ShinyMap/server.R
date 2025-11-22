@@ -367,7 +367,7 @@ function(input, output, session) {
       selected_seedlot_data <- LoadedinData_rounded %>% 
         filter(Seedlot %in% selected_seedlots$seedlot_ID) %>% 
         select(Seedlot, latitude, longitude, Seedling_number_rustassay,	Mean_seedling_score_rustassay, Sd_seedling_score_rustassay) %>% 
-        unique()
+        distinct(Seedlot, .keep_all = TRUE)
       colnames(selected_seedlot_data) <- c("Seed lot", "Latitude collected", "Longitude collected", "Number of seedlings scored", "Mean seedling score", "Seedling score SD")
       selected_seedlot_data
     })
@@ -413,11 +413,11 @@ function(input, output, session) {
       selected_seedlot_data_2 <- LoadedinData_rounded %>% 
         filter(Seedlot %in% selected_seedlots$seedlot_ID) %>% 
         select(Seedlot, latitude, longitude,	MatLine_Genompred , Seedling_number_genompred, Mean_seedling_score_genompred, Sd_seedling_score_genompred) %>% 
-        unique()
+        distinct(Seedlot, .keep_all = TRUE) 
       colnames(selected_seedlot_data_2) <- c("Seed lot", "Latitude collected", "Longitude collected", "Maternal line score", "Number of seedlings scored", "Mean seedling score", "Seedling score SD")
       selected_seedlot_data_2
     })
-
+    
     output$marker_table_2 <- renderDT({
       datatable(
         selected_seedlot_data_2(),
@@ -430,6 +430,8 @@ function(input, output, session) {
         )
       )
     })
+    
+    
     
     # Remove seedlot when clicked - DF 2
     observeEvent(input$marker_table_2_rows_selected, {

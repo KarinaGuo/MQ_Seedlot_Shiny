@@ -21,9 +21,10 @@ Mat_line_droughttol <- read.csv(file = "C:/Users/swirl/OneDrive/Documents/RBGSyd
 colnames(Mat_line_droughttol)[1] <- 'sample_lib_NSW'
 Mat_line_droughttol <- left_join(Mat_line_droughttol, parent_meta_lib) %>% 
   dplyr::select (NSWID, Prediction)
-colnames(Mat_line_droughttol) <- c("Seedlot", "MatLine_Genompred")
+Mat_line_droughttol_rmdup <- Mat_line_droughttol[!duplicated(Mat_line_droughttol$NSWID), ]
+colnames(Mat_line_droughttol_rmdup) <- c("Seedlot", "MatLine_Genompred")
 
-JB_db_MatlineGenompred <- left_join(JB_db, Mat_line_droughttol)
+JB_db_MatlineGenompred <- left_join(JB_db, Mat_line_droughttol_rmdup)
 
 ## Add in drought seedling predictions individuals 
 
@@ -45,7 +46,7 @@ prediction_gt_droughtexp_rmpoorsamp <- left_join(IID_block, prediction_gt_drough
 
 # Add in GP from iter 48
 iter_48_GP <- read.csv("~/RBGSyd_Technical Officer/MQuin/Seedling GWAS/Filtering/Iteration 6/data/GAPIT_48/prediction_gt.csv"); colnames(iter_48_GP)[1] <- "LIBRARY"
-prev_exp_pedi <- read.csv("~/Uni/Doctorate/Samples/Seedlot_plot_data/prev_exp_pedi.csv")
+prev_exp_pedi <- read.csv("~/Uni/Doctorate/Samples/Seedlot_plot_data/data/prev_exp_pedi.csv")
 prev_exp_pedi$FID <- gsub ("_", "", prev_exp_pedi$FID)
 
 iter_48_GP_pedi <- left_join(iter_48_GP, prev_exp_pedi) %>% 
