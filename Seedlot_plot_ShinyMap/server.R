@@ -9,6 +9,7 @@ library(waiter) # loading sign reactively
 library(shinyjs) # shiny java
 library(DT) # Render datatable
 library(shinyWidgets) # Confirmation messages 
+library(htmlwidgets)
 
 setwd("~/Uni/Doctorate/Samples/Seedlot_plot_data/")
 
@@ -44,6 +45,22 @@ function(input, output, session) {
   # Track the first visit to the tab 
   first_visit <- reactiveVal(TRUE) 
   
+  ## Marker images
+  # For circle markers
+  svg_urls <- sprintf(
+    "data:image/svg+xml,%s",
+    URLencode(sprintf(
+      "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>
+       <circle cx='8' cy='8' r='6' fill='%s' opacity='0.8'/>
+     </svg>", 
+      MR_Sev_pal(LoadedinData$Mean_seedling_score_rustassay)
+    ), reserved = TRUE)
+  )
+  
+  # List of selected seedlots
+  selected_seedlots <- reactiveValues(seedlot_ID = character(0))
+  
+  ##
   # Render initial map for first visit
   observeEvent(input$tabs, {
     if (input$tabs == "Seed lot map" && first_visit()) { 
@@ -69,52 +86,57 @@ function(input, output, session) {
       
       leafletProxy("map") %>%
         clearMarkers() %>%
-        addCircleMarkers(
+        clearMarkerClusters() %>%
+        removeControl(layerId = "marker_legend") %>%
+        
+        addMarkers(
           lng = data$longitude,
           lat = data$latitude,
-          layerId = data$Seedlot,
           popup = popup_info,
-          stroke = FALSE,
-          radius = 6,
-          fillOpacity = 0.8,
-          fillColor = MR_Sev_pal(data$Mean_seedling_score_rustassay),
-          options = markerOptions(rust = data$Mean_seedling_score_rustassay),
+          layerId = data$Seedlot,   # for clusters
+          
+          ## Convert circle style to icons
+          icon = icons(
+            iconUrl = svg_urls,
+            iconWidth = 16,
+            iconHeight = 16
+          ),
+          
+          options = markerOptions(rust = data$Mean_seedling_score_rustassay,
+                                  layerId = data$Seedlot),
+          
           clusterOptions = markerClusterOptions(
             spiderfyDistanceMultiplier = 1.5,
-            iconCreateFunction = JS(
-              "function(cluster) {
-              var markers = cluster.getAllChildMarkers();
-              var sum = 0;
-              var count = 0;
-              for (var i = 0; i < markers.length; i++) {
-                var rust = markers[i].options.rust;
-                if (rust != null) { sum += rust; count += 1; }
-              }
-              var avg = count > 0 ? sum / count : 0;
-              var color = '';
-              if (avg < 10) { color = '#ffffb2'; }
-              else if (avg < 30) { color = '#fecc5c'; }
-              else if (avg < 50) { color = '#fd8d3c'; }
-              else { color = '#e31a1c'; }
-              return L.divIcon({
-                html: '<div style=\"background-color:' + color + '\"><span>' + cluster.getChildCount() + '</span></div>',
-                className: 'marker-cluster',
-                iconSize: L.point(40, 40)
-              });
-            }"
-            )
+            iconCreateFunction = JS("
+        function(cluster) {
+          var markers = cluster.getAllChildMarkers();
+          var sum = 0;
+          var count = 0;
+          for (var i = 0; i < markers.length; i++) {
+            var rust = markers[i].options.rust;
+            if (rust != null) {
+              sum += rust;
+              count += 1;
+            }
+          }
+          var avg = count > 0 ? sum / count : 0;
+
+          var color = '';
+          if (avg < 10) { color = '#ffffb2'; }
+          else if (avg < 30) { color = '#fecc5c'; }
+          else if (avg < 50) { color = '#fd8d3c'; }
+          else { color = '#e31a1c'; }
+
+          return L.divIcon({
+            html: '<div style=\"background-color:' + color + '\"><span>' + cluster.getChildCount() + '</span></div>',
+            className: 'marker-cluster',
+            iconSize: L.point(40, 40)
+          });
+        }
+      ")
           )
-        ) %>%
-        
-        addLegend(
-          position = "bottomright",
-          pal = MR_Sev_pal,
-          values = data$Mean_seedling_score_rustassay,
-          title = "Seedlot's mean rust assay score",
-          opacity = 1,
-          layerId = "marker_legend"
         ) 
-      
+    
       # Mark that the tab has been visited once
       first_visit(FALSE)
     }
@@ -127,7 +149,25 @@ function(input, output, session) {
   output$map <- renderLeaflet({
     leaflet() %>%
       setView(lng=151.20990, lat=-33.865143, zoom=8) %>% 
-      addProviderTiles(providers$CartoDB.Positron) 
+      addProviderTiles(providers$CartoDB.Positron) %>%
+      onRender(JS("
+      function(el, x) {
+        var map = this;
+
+        map.on('layeradd', function(e) {
+          // When a cluster group is added, attach the clusterclick listener
+          if (e.layer instanceof L.MarkerClusterGroup) {
+
+            e.layer.on('clusterclick', function(ev) {
+              var markers = ev.layer.getAllChildMarkers();
+              var ids = markers.map(function(m) { return m.options.layerId; });
+
+              Shiny.setInputValue('cluster_ids', ids, {priority: 'event'});
+            });
+          }
+        });
+      }
+    "))
   })
   
   # Filter seedlots based on input filters
@@ -195,32 +235,30 @@ function(input, output, session) {
     
     ### Loading in Map
     leafletProxy("map") %>%
-      ## Clean map to update reactively to changes
       clearMarkers() %>%
       clearMarkerClusters() %>%
-      removeControl(layerId = "marker_legend") %>% 
+      removeControl(layerId = "marker_legend") %>%
       
-      ## Seedlots
-      addCircleMarkers(
+      addMarkers(
         lng = data$longitude,
         lat = data$latitude,
         popup = popup_info,
-        stroke = FALSE,
-        radius = 6,
-        fillOpacity = 0.8,
-        fillColor = MR_Sev_pal(data$Mean_seedling_score_rustassay),
+        layerId = data$Seedlot,   # for clusters
         
-        ## Colouring in seedlots based on severity
-        options = markerOptions(
-          rust = data$Mean_seedling_score_rustassay  # pass custom variable here
+        ## Convert circle style to icons
+        icon =  icons(
+          iconUrl = svg_urls,
+          iconWidth = 16,
+          iconHeight = 16
         ),
         
-        ## JS for colouring based on rust in child clusters
-        clusterOptions = markerClusterOptions( 
-          spiderfyDistanceMultiplier=1.5,
-          # Colour clusters
-          iconCreateFunction = JS(" 
-          function(cluster) {
+        options = markerOptions(rust = data$Mean_seedling_score_rustassay,
+                                layerId = data$Seedlot),
+        
+        clusterOptions = markerClusterOptions(
+          spiderfyDistanceMultiplier = 1.5,
+          iconCreateFunction = JS("
+        function(cluster) {
           var markers = cluster.getAllChildMarkers();
           var sum = 0;
           var count = 0;
@@ -232,7 +270,7 @@ function(input, output, session) {
             }
           }
           var avg = count > 0 ? sum / count : 0;
-          
+
           var color = '';
           if (avg < 10) { color = '#ffffb2'; }
           else if (avg < 30) { color = '#fecc5c'; }
@@ -245,12 +283,9 @@ function(input, output, session) {
             iconSize: L.point(40, 40)
           });
         }
-        "),
-          colors = MR_Sev_pal
-          
+      ")
         )
-      )
-    
+      ) 
     
     # Add legend on map
     if (nrow(data) > 1 && !all(is.na(data$Mean_seedling_score_rustassay))) {
@@ -315,41 +350,82 @@ function(input, output, session) {
     
     ###########
     ## Function: Select seedlots - Print clicked_marker in sidePanel with a button for "add to list". When pressed, add clicked_marker to selected_seedlots
+    
+    ## Clicked markers
     last_clicked_marker <- reactiveValues(id = NULL, lat = NULL, lng = NULL)
+    last_clicked_cluster <- reactiveValues(id = NULL, lat = NULL, lng = NULL)
+    
+    ## Cluster click
+    observeEvent(input$cluster_ids, {
+      last_clicked_cluster$id  <- input$cluster_ids
+    })
     
     observeEvent(input$map_marker_click, {
-      clicked_marker <- input$map_marker_click
-      last_clicked_marker$id  <- clicked_marker$id
+      last_clicked_marker$id  <- input$map_marker_click$id
+      last_clicked_cluster$id  <- input$cluster_ids
     })
     
-    # If not a marker pressed, hide button
-    observeEvent(input$map_click, {
-      last_clicked_marker$id  <- NULL
-    })
+
     
     # Show button only if a marker is clicked
     output$click_info <- renderUI({
-      req(last_clicked_marker$id)
-      if (is.null(last_clicked_marker$id)) return(NULL)
+      req(any(
+        !is.null(last_clicked_marker$id),
+          !is.null(last_clicked_cluster$id)
+      ))
+      
+      #if (is.null(last_clicked_marker$id) & is.null(last_clicked_cluster$id)) return(NULL)
+      
+      # Only paste whichever is not null
+      if (!is.null(last_clicked_marker$id)) {
+        seedlot_list_clicked <- last_clicked_marker$id
+      } else if (!is.null(last_clicked_cluster$id)) {
+        seedlot_list_clicked <- last_clicked_cluster$id
+      } else {
+        return(NULL)
+      }
+      
       tagList(
         h4("Selected Marker"),
+        p(
+          if (length(seedlot_list_clicked) > 20) {
+            paste(paste(head(seedlot_list_clicked, 20), collapse = ", "), "... too many to list")
+          } else {
+            paste(seedlot_list_clicked, collapse = ", ")
+          }),
         actionButton("add_seedlot", "Record seed lot")
       )
     })
     
-    selected_seedlots <- reactiveValues(seedlot_ID = c())
-    
     observeEvent(input$add_seedlot, {
-      req(last_clicked_marker$id)
+      req(any(
+        !is.null(last_clicked_marker$id),
+        !is.null(last_clicked_cluster$id)
+      )) 
       
-      if (!last_clicked_marker$id %in% selected_seedlots$seedlot_ID) {
-        selected_seedlots$seedlot_ID  <- c(selected_seedlots$seedlot_ID,  last_clicked_marker$id)
+      # append to list
+      if (!is.null(last_clicked_marker$id)) {
+        selected_seedlots$seedlot_ID <- unique(
+          c(selected_seedlots$seedlot_ID, last_clicked_marker$id)
+        )
+      } else if (!is.null(last_clicked_cluster$id)) {
+        selected_seedlots$seedlot_ID <- unique(
+          c(selected_seedlots$seedlot_ID, last_clicked_cluster$id)
+        )
+      } else {
+        return(NULL)
       }
     })
     
-    # Filter data reactively then plot - hide if 
-      # Hide table if nothing selected
+    ##
+    # If not a marker pressed, hide button
+    observeEvent(input$map_click, {
+      last_clicked_marker$id  <- NULL
+      last_clicked_cluster$id  <- NULL
+    })
     
+    
+    # Filter data reactively then plot - hide if  if nothing selected
     observe({
       if (length(selected_seedlots$seedlot_ID) > 0) {
         updateTextInput(session, "have_selection", value = "TRUE")
@@ -358,6 +434,7 @@ function(input, output, session) {
       }
     })
     
+    #########
     LoadedinData_rounded <- LoadedinData %>%
       mutate_if(is.numeric, round, digits = 2)
     
