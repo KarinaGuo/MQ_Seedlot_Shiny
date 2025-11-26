@@ -21,6 +21,11 @@ maxent_MR <- raster("data/maxent_MR.tiff")
 maxent_intersection <- raster("data/maxent_intersection.tiff")
 maxent_studyarea <- st_read("data/maxent_studyarea.gpkg")
 
+MQ_observations <- read.csv("data/MQ_locs_clean.csv"); MQ_observations <- MQ_observations[,2:3]
+MR_observations <- read.csv("data/MR_locs_clean.csv"); MR_observations <- MR_observations[,2:3]
+
+date=Sys.Date()
+
 # Palettes 
 # For seedlots based on severity - actively shifts based on observed data
 MR_Sev_pal <- colorNumeric(
@@ -33,7 +38,6 @@ MR_Sev_pal <- colorNumeric(
 pal_mr <- colorRampPalette(c("grey95","#C6DC96","#C6DC96","darkolivegreen","yellow"))
 pal_mq <- colorRampPalette(c("grey95","#EAC8BF","#EAC8BF","orange","forestgreen"))
 pal_int <- colorRampPalette(c("grey95","#C6DC96","#C6DC96","#45B055","#4870BD", "deeppink4"))
-
 
 ############################################################################################
 
@@ -135,6 +139,14 @@ function(input, output, session) {
         }
       ")
           )
+        ) %>%
+        addLegend(
+          position = "bottomright",
+          pal = MR_Sev_pal,
+          values = data$Mean_seedling_score_rustassay,
+          title = "Seedlot's mean rust assay score",
+          opacity = 1,
+          layerId = "marker_legend"
         ) 
     
       # Mark that the tab has been visited once
@@ -167,7 +179,7 @@ function(input, output, session) {
           }
         });
       }
-    "))
+    ")) 
   })
   
   # Filter seedlots based on input filters
@@ -369,10 +381,7 @@ function(input, output, session) {
     
     # Show button only if a marker is clicked
     output$click_info <- renderUI({
-      req(any(
-        !is.null(last_clicked_marker$id),
-          !is.null(last_clicked_cluster$id)
-      ))
+      req(any(!is.null(last_clicked_marker$id), !is.null(last_clicked_cluster$id)))
       
       #if (is.null(last_clicked_marker$id) & is.null(last_clicked_cluster$id)) return(NULL)
       
@@ -408,10 +417,14 @@ function(input, output, session) {
         selected_seedlots$seedlot_ID <- unique(
           c(selected_seedlots$seedlot_ID, last_clicked_marker$id)
         )
+        last_clicked_marker$id  <- NULL
+        last_clicked_cluster$id  <- NULL
       } else if (!is.null(last_clicked_cluster$id)) {
         selected_seedlots$seedlot_ID <- unique(
           c(selected_seedlots$seedlot_ID, last_clicked_cluster$id)
         )
+        last_clicked_marker$id  <- NULL
+        last_clicked_cluster$id  <- NULL
       } else {
         return(NULL)
       }
@@ -434,6 +447,29 @@ function(input, output, session) {
       }
     })
     
+    
+    ######## Add larger circle for seedlots added to selection
+    # observe({
+    #   
+    #   if (length(selected_seedlots$seedlot_ID) > 0) {
+    #     data <- LoadedinData 
+    #     selected_data <- data[data$Seedlot %in% selected_seedlots$seedlot_ID, ]
+    #     
+    #     leafletProxy("map") %>%
+    #       addCircleMarkers(
+    #         lng = selected_data$longitude,
+    #         lat = selected_data$latitude,
+    #         radius = 12,                        # larger than original
+    #         color = "red",                       # border color
+    #         weight = 2,
+    #         fillColor = "transparent",           # or a semi-transparent fill
+    #         fillOpacity = 0.3,
+    #         layerId = paste0("selected_", selected_data$Seedlot), # unique IDs
+    #         options = pathOptions(clickable = FALSE) # ensures they don't interfere with marker clicks
+    #       )
+    #   }
+    # })
+  
     #########
     LoadedinData_rounded <- LoadedinData %>%
       mutate_if(is.numeric, round, digits = 2)
@@ -544,5 +580,34 @@ function(input, output, session) {
         selected_seedlots$seedlot_ID <- setdiff(selected_seedlots$seedlot_ID, seedlot_to_remove_1)
         selected_seedlots$seedlot_ID <- setdiff(selected_seedlots$seedlot_ID, seedlot_to_remove_2)
       }
+    })
+    
+    observeEvent(input$report_gen_butt, {
+      confirmSweetAlert(
+        session = session,
+        inputId = "confirm_report",
+        title = "Produce report?",
+        text = paste("Creating report at Selected_seedlots",date,".csv"),
+        type = "question",
+        btn_labels = c("Cancel", "Generate"),
+        closeOnClickOutside = TRUE,
+        showCloseButton = TRUE,
+        allowEscapeKey = TRUE,
+        btn_colors = c("grey70", "darkseagreen2"),
+        danger_mode = TRUE
+      )
+    })
+    
+    observeEvent(input$confirm_report, {
+      
+      req(input$confirm_report)
+      selected_seedlot_data <- LoadedinData_rounded %>% 
+        filter(Seedlot %in% selected_seedlots$seedlot_ID) %>% 
+        select(Seedlot, latitude, longitude, Seedling_number_rustassay,	Mean_seedling_score_rustassay, Sd_seedling_score_rustassay, MatLine_Genompred , Seedling_number_genompred, Mean_seedling_score_genompred, Sd_seedling_score_genompred) %>% 
+        distinct(Seedlot, .keep_all = TRUE)
+      colnames(selected_seedlot_data) <- c("Seed lot", "Latitude collected", "Longitude collected", "Number of seedlings scored (Assay)", "Mean seedling score (Assay)", "Seedling score SD (Assay)", "Maternal line score (GenomPred)", "Number of seedlings scored (GenomPred)", "Mean seedling score (GenomPred)", "Seedling score SD (GenomPred)")
+      
+      write.csv(selected_seedlot_data, file = paste0("Selected_seedlots_",date,".csv"), row.names=FALSE)
+      showNotification("Report generated.", type = "message")
     })
 }

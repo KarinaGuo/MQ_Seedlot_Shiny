@@ -131,8 +131,14 @@ fluidPage(
                     "Myrtle rust" = "MR",
                     "Intersection" = "Intersection"),
         selected = "MQuin"
-      )
+      ),
+      br(),
+      radioButtons("MRMQ_Obs", "Show present distribution?",
+                   choices = c("Show" = "show_obs",
+                               "Hide" = "hide_obs"),
+                   selected = "hide_obs")
     ),
+    
     hr(),
     uiOutput("click_info")
     ),
@@ -143,11 +149,17 @@ fluidPage(
                   leafletOutput("map", width = "100%", height = "70vh"),
       ),
       
-      ## Add table of selected seedlots
-      useShinyjs(),
+      ## Add generate report button
       hidden(textInput("have_selection", "sel", value = "FALSE")),
       conditionalPanel(condition = "input.have_selection == 'TRUE'",
                        br(),
+                       actionButton("report_gen_butt","Write selected seedlot report")
+                       ),
+      
+      ## Add table of selected seedlots
+      useShinyjs(),
+      #hidden(textInput("have_selection", "sel", value = "FALSE")),
+      conditionalPanel(condition = "input.have_selection == 'TRUE'",
                        h3("Selected seed lots"),
                        p("Click on seed lots to remove from selection"),
                        br(),
