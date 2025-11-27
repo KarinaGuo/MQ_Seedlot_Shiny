@@ -247,7 +247,7 @@ function(input, output, session) {
     
     ### Loading in Map
     leafletProxy("map") %>%
-      clearMarkers() %>%
+      removeMarker(layerId = data$Seedlot) %>%
       clearMarkerClusters() %>%
       removeControl(layerId = "marker_legend") %>%
       
@@ -256,13 +256,8 @@ function(input, output, session) {
         lat = data$latitude,
         popup = popup_info,
         layerId = data$Seedlot,   # for clusters
-        
-        ## Convert circle style to icons
-        icon =  icons(
-          iconUrl = svg_urls,
-          iconWidth = 16,
-          iconHeight = 16
-        ),
+          
+        icon =  icons(iconUrl = svg_urls, iconWidth = 16, iconHeight = 16), ## Convert circle style to icons
         
         options = markerOptions(rust = data$Mean_seedling_score_rustassay,
                                 layerId = data$Seedlot),
@@ -313,6 +308,9 @@ function(input, output, session) {
     }
   })
     
+  ## Marker IDs
+  Marker_RV <- reactiveValues(marker_ids = NULL)
+  
     ## Loading in rasters for SDM
     observe({
       req(input$overlay_SDM == "show")
@@ -332,20 +330,56 @@ function(input, output, session) {
                                  "Intersection" = pal_int(20))
       color_pal <- colorNumeric(palette = selected_palette, domain = values(selected_raster), na.color = "transparent")
       
+      selected_observations <- switch(input$layer_curr,
+                                      "MQuin" = MQ_observations,
+                                      "MR" = MR_observations,
+                                      "Intersection" = data.frame(rbind(MQ_observations, MR_observations))) 
+      selected_observations$colour <- switch(input$layer_curr,
+                                             "MQuin" = "#2e7031",
+                                             "MR" = "#ff5024",
+                                             "Intersection" = c(rep("#2e7031", nrow(MQ_observations)),
+                                                                rep("#ff5024", nrow(MR_observations))))
+      
+      
       # Plotting rasters
       leafletProxy("map") %>%
         clearImages() %>%
         removeControl(layerId = "raster_legend") %>% 
         addRasterImage(selected_raster, colors = selected_palette, opacity = 0.5, group = input$layer_curr) %>% 
         addLegend(position = "topright", pal = color_pal, values = values(selected_raster), title = "SDM value", layerId = "raster_legend", group = input$layer_curr)
+      
+      if (input$MRMQ_Obs == "show_obs"){
+        leafletProxy("map") %>%
+          clearMarkers() %>% 
+          addCircleMarkers(
+            data = selected_observations,
+            lng = ~decimalLongitude,
+            lat = ~decimalLatitude,
+            fillColor = ~colour,
+            group = input$layer_curr,
+            stroke = FALSE,
+            radius = 2,
+            fillOpacity = 0.5
+          )
+      }
+
     })
     
     ## Hide raster if Hide
     observe({
       req(input$overlay_SDM == "hide")
+      
       leafletProxy("map") %>%
         clearImages() %>%
+        clearMarkers() %>% 
         removeControl(layerId = "raster_legend")
+    })
+    
+    observe({
+      req(input$MRMQ_Obs == "hide_obs")
+      
+      leafletProxy("map") %>%
+        clearMarkers()
     })
     
     

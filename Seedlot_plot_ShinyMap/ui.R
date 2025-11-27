@@ -132,11 +132,10 @@ fluidPage(
                     "Intersection" = "Intersection"),
         selected = "MQuin"
       ),
-      br(),
-      radioButtons("MRMQ_Obs", "Show present distribution?",
-                   choices = c("Show" = "show_obs",
-                               "Hide" = "hide_obs"),
-                   selected = "hide_obs")
+       radioButtons("MRMQ_Obs", "Show present distribution?",
+                    choices = c("Show" = "show_obs",
+                                "Hide" = "hide_obs"),
+                    selected = "hide_obs"),
     ),
     
     hr(),
