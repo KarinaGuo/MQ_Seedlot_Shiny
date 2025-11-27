@@ -11,6 +11,25 @@ library(shinyjs)
 setwd("~/Uni/Doctorate/Samples/Seedlot_plot_data/")
 LoadedinData <- read.csv("data/final_seedloty_plot.csv")
 
+# Load future projection data
+years_clust <- c("2021-2040", "2041-2060", "2061-2080")
+ssp_list <- c("126", "245", "370", "585")
+
+for (species in c("MQuin", "MR")){
+  for (cluster in years_clust){
+    for (ssp in ssp_list){
+      read_file <- raster(paste0("data/maxent_",species, cluster, "_", ssp, ".tiff"))
+      assign(paste0("maxent_",species, cluster, "_", ssp), read_file)
+    }
+  }
+}
+
+for (cluster in years_clust){
+  for (ssp in ssp_list){
+    read_file <- raster(paste0("data/future_maxent_intersection", cluster, "_", ssp, ".tiff"))
+    assign(paste0("maxent_intersection", cluster, "_", ssp), read_file)
+  }
+}
 
 fluidPage(
   useWaiter(),  # Loading spinner
@@ -52,7 +71,9 @@ fluidPage(
                       )
                     )
            ),
-## Main Tab
+
+#######################################################################
+## Tab: Seedlot plot
 tabPanel("Seed lot map",
 
 fluidPage(
@@ -172,6 +193,183 @@ fluidPage(
     )
   )
 )
+),
+
+###############################################
+# Tab: Site risk
+tags$head(
+  tags$style(HTML("
+    .disabled-item {
+      color: #999999;
+      text-decoration: line-through;
+      opacity: 0.6;
+    }
+    .clickable {
+      cursor: pointer;
+    }
+  ")),
+  
+  tags$script(HTML("
+      $(document).on('click', '.clickable', function() {
+        let id = $(this).attr('id');
+        $(this).toggleClass('disabled-item');
+        
+        let isDisabled = $(this).hasClass('disabled-item') ? 1 : 0;
+        Shiny.setInputValue(id + '_disabled', isDisabled, {priority: 'event'});
+      });
+  "))
+),
+
+tabPanel("Site risk",
+         fluidRow(
+           
+           textInput("latitude", "Site Latitude: ", value = ""),
+           textInput("longitude", "Site Longitude: ", value = ""),
+           
+           em("Press on any score to remove from calculation"),
+           hr(),
+           
+           column(6,
+                  h3("Site scoring"),
+                  
+                  p(id="SDM_curr_p", class="clickable", strong("Current SDM Overlap Score: "), textOutput("SDM_curr_overlap_score", inline = TRUE)),
+                  p(id="SDM_fut_p", class="clickable", strong("Future SDM Overlap Score (2021-2040 SSP126): "), textOutput("SDM_fut_overlap_score", inline = TRUE)),
+                  
+                  div(
+                    span(id="Site_DisPres_p", class="clickable", strong("Site Disease presence: ")),
+                    radioButtons("Site_DisPres", NULL, 
+                                 choices = c("Low" = "low_site_dispres",
+                                             "High" = "high_site_dispres",
+                                             "Unknown" = "unknown_site_dispres"),
+                                 selected = "unknown_site_dispres")
+                  ),
+                  
+                  div(
+                    span(id="Water_pres_p", class="clickable", strong("Water body nearby? ")), 
+                    radioButtons("Water_pres", NULL,
+                                 choices = c("Yes" = "pres_water",
+                                             "No" = "notpres_water",
+                                             "Unknown" = "unknown_water"),
+                                 selected = "unknown_water")
+                  ),
+                  
+                  div(
+                    span(id="Edge_eff_p", class="clickable", strong("Edge effect or/and foot traffic present? ")), 
+                    radioButtons("Edge_eff", NULL,
+                                 choices = c("Yes" = "pres_edge",
+                                             "No" = "notpres_edge",
+                                             "Unknown" = "unknown_edge"),
+                                 selected = "unknown_edge")
+                  ),
+                  
+                  div(
+                    span(id="Time_lastburn_p", class="clickable", strong("Time since last burnt (>2010): ")),
+                    sliderTextInput("Time_lastburn", NULL,
+                                    choices = c("No Burn", seq(from = 2010, to = year(Sys.Date()))),
+                                    grid = TRUE,
+                                    selected="No Burn",
+                                    dragRange=FALSE)
+                  ),
+                  
+                  div(
+                    span(id="Burn_severity_p", class="clickable", strong("Severity of burn: ")),
+                    radioButtons("Burn_severity", NULL, 
+                                 choices = c("Low" = "low_burn_severity",
+                                             "Moderate" = "mod_burn_severity",
+                                             "High" = "high_burn_severity",
+                                             "Unknown" = "unknown_burn_severity"),
+                                 selected = "unknown_burn_severity")
+                  )
+           ),
+           
+           column(6,
+                  h3("Disease scoring"),
+                  h4("Were any individuals genotyped (using DArTag)"),
+                  
+                  div(
+                    span(id="Adult_genompredres_p", class="clickable", strong("Adult genomic prediction of resistance: ")),
+                    radioButtons("Adult_genompredres", NULL,
+                                 choices = c("Low" = "low_adult_resistance",
+                                             "Moderate" = "mod_adult_resistance",
+                                             "High" = "high_adult_resistance",
+                                             "Unknown" = "unknown_adult_resistance"),
+                                 selected = "unknown_adult_resistance")
+                  ),
+                  
+                  div(
+                    span(id="Seedling_genompredres_p", class="clickable", strong("Seedling genomic prediction of resistance: ")),
+                    radioButtons("Seedling_genompredres", NULL,
+                                 choices = c("Low" = "low_seedl_resistance",
+                                             "Moderate" = "mod_seedl_resistance",
+                                             "High" = "high_seedl_resistance",
+                                             "Unknown" = "unknown_seedl_resistance"),
+                                 selected = "unknown_seedl_resistance")
+                  ),
+                  
+                  conditionalPanel(
+                    condition = "any(!input.Seedling_genompredres == 'unknown_seedl_resistance', !input.Adult_genompredres == 'unknown_adult_resistance')",
+                    div(
+                      span(id="Geno_conf_p", class="clickable", strong("Genotyping confidence: ")),
+                      radioButtons("Geno_conf", NULL,
+                                   choices = c("Low" = "low_geno_conf",
+                                               "Moderate" = "mod_geno_conf",
+                                               "High" = "high_geno_conf",
+                                               "Unknown" = "unknown_seedl_resistance"),
+                                   selected = "unknown_seedl_resistance")
+                    )
+                  ),
+                  
+                  actionButton("calculate_score", "Calculate risk"),
+                  
+                  conditionalPanel(
+                    condition = "input.calculate_score > 0",
+                    h4("Risk score:"),
+                    textOutput("risk_score")
+                  )
+           )
+         )
+),
+
+
+###############################################
+# Tab: Future Projections
+tabPanel("Future projections",
+         sidebarLayout(
+           sidebarPanel(
+             radioButtons("layer_fut", "Choose Layer to Display:",
+                          choices = c("Melaleuca quinquenervia" = "MQuin_fut",
+                                      "Myrtle rust" = "MR_fut",
+                                      "Intersection" = "intersection_fut"),
+                          selected = "MQuin_fut"),
+             
+             br(),  # Add space between inputs
+             
+             tags$style(type = "text/css", ".irs-grid-pol.small {height: 0px;}"), # Removing the minor ticks in the slider input
+             sliderTextInput("year_clust", "Average climate year cluster:",
+                             choices = years_clust,
+                             selected = "2021-2040",
+                             grid = TRUE),
+             
+             br(),  # Add space between inputs
+             
+             tags$style(type = "text/css", ".irs-grid-pol.small {height: 0px;}"), # Removing the minor ticks in the slider input
+             sliderTextInput("ssp", "Climate scenario (SSP):",
+                             choices = ssp_list,
+                             selected = "126",
+                             grid = TRUE),
+             
+             br(),
+             radioButtons("fut_show_both", "Show present distribution?",
+                          choices = c("Show" = "fut_show_pres",
+                                      "Hide" = "fut_hide_pres"),
+                          selected = "fut_hide_pres")
+           ),
+           
+           mainPanel(
+             withSpinner(color="grey60",
+               leafletOutput("map_2", height = "90vh"))
+           )
+         )
 )
   )
 )

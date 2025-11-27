@@ -24,6 +24,27 @@ maxent_studyarea <- st_read("data/maxent_studyarea.gpkg")
 MQ_observations <- read.csv("data/MQ_locs_clean.csv"); MQ_observations <- MQ_observations[,2:3]
 MR_observations <- read.csv("data/MR_locs_clean.csv"); MR_observations <- MR_observations[,2:3]
 
+# Load future projection data
+years_clust <- c("2021-2040", "2041-2060", "2061-2080")
+ssp_list <- c("126", "245", "370", "585")
+
+for (species in c("MQuin", "MR")){
+  for (cluster in years_clust){
+    for (ssp in ssp_list){
+      read_file <- raster(paste0("data/maxent_",species, cluster, "_", ssp, ".tiff"))
+      assign(paste0("maxent_",species, cluster, "_", ssp), read_file)
+    }
+  }
+}
+
+for (cluster in years_clust){
+  for (ssp in ssp_list){
+    read_file <- raster(paste0("data/future_maxent_intersection", cluster, "_", ssp, ".tiff"))
+    assign(paste0("maxent_intersection", cluster, "_", ssp), read_file)
+  }
+}
+
+##
 date=Sys.Date()
 
 # Palettes 
@@ -92,6 +113,7 @@ function(input, output, session) {
         clearMarkers() %>%
         clearMarkerClusters() %>%
         removeControl(layerId = "marker_legend") %>%
+        addPolygons(data = maxent_studyarea, color = "black", weight = 1, fill = FALSE, group = "Outline") %>% 
         
         addMarkers(
           lng = data$longitude,
@@ -162,6 +184,7 @@ function(input, output, session) {
     leaflet() %>%
       setView(lng=151.20990, lat=-33.865143, zoom=8) %>% 
       addProviderTiles(providers$CartoDB.Positron) %>%
+      addPolygons(data = maxent_studyarea, color = "black", weight = 1, fill = FALSE, group = "Outline") %>% 
       onRender(JS("
       function(el, x) {
         var map = this;
@@ -644,4 +667,202 @@ function(input, output, session) {
       write.csv(selected_seedlot_data, file = paste0("Selected_seedlots_",date,".csv"), row.names=FALSE)
       showNotification("Report generated.", type = "message")
     })
+    
+    #######################################################################
+    # Site risk tab
+    #Server:
+    
+    SDM_curr_overlap_score <- reactive({
+      # Convert input to numeric
+      lat <- as.numeric(input$latitude)
+      lon <- as.numeric(input$longitude)
+      
+      # Check if inputs are valid numbers
+      if (is.na(lat) || is.na(lon)) {
+        return(NULL)  # or some default/error value
+      }
+      
+      # Call the extract function
+      extract(maxent_intersection, cbind(lon, lat))
+    })
+  
+    output$SDM_curr_overlap_score <- renderText({
+      value <- SDM_curr_overlap_score()
+      if (is.null(value)){
+        NULL
+      } else {
+        round(value, 3) 
+      }
+      })
+  
+    SDM_fut_overlap_score <- reactive({
+      # Convert input to numeric
+      lat <- as.numeric(input$latitude)
+      lon <- as.numeric(input$longitude)
+      
+      # Check if inputs are valid numbers
+      if (is.na(lat) || is.na(lon)) {
+        return(NULL)  # or some default/error value
+      }
+      
+      # Call the extract function
+      extract(`maxent_intersection2021-2040_126`, cbind(lon, lat))
+    })
+    
+    output$SDM_fut_overlap_score <- renderText({
+      value <- SDM_fut_overlap_score()
+      if (is.null(value)){
+        NULL
+      } else {
+        round(value, 3) 
+      }
+    })
+    
+    # Calculate site score and disease risk
+    observeEvent(input$calculate_score, {
+      
+      score_Site_DisPres <- ifelse(input$Site_DisPres == "low_site_dispres", 1,
+                                   ifelse(input$Site_DisPres == "high_site_dispres", 2, 0))
+      score_Site_DisPres <- score_Site_DisPres/2
+      
+      score_Water_pres <- ifelse(input$Water_pres == "notpres_water", 1,
+                                 ifelse(input$Water_pres == "pres_water", 2, 0))
+      score_Water_pres <- score_Water_pres/2
+      
+      score_Edge_eff <- ifelse(input$Edge_eff == "notpres_edge", 1,
+                               ifelse(input$Edge_eff == "pres_edge", 2, 0))
+      score_Edge_eff <- score_Edge_eff/2
+      
+      score_Time_lastburn <- if (input$Time_lastburn != "No Burn") {(year(Sys.Date()) - as.numeric(input$Time_lastburn))} else {0}
+      score_Time_lastburn <- score_Time_lastburn/15
+      
+      score_Burn_severity <- ifelse(input$Burn_severity == "low_burn_severity", 1,
+                                ifelse(input$Burn_severity == "mod_burn_severity", 2,
+                                       ifelse(input$Burn_severity == "high_burn_severity", 3, 0)))
+      score_Burn_severity <- score_Burn_severity/3
+      
+      score_Adult_genompredres <- ifelse(input$Adult_genompredres == "low_adult_resistance", 1,
+                                    ifelse(input$Adult_genompredres == "mod_adult_resistance", 2,
+                                           ifelse(input$Adult_genompredres == "high_adult_resistance", 3, 0)))
+      score_Adult_genompredres <- score_Adult_genompredres/3
+      
+      score_Seedling_genompredres <- ifelse(input$Seedling_genompredres == "low_seedl_resistance", 1,
+                                         ifelse(input$Seedling_genompredres == "mod_seedl_resistance", 2,
+                                                ifelse(input$Seedling_genompredres == "high_seedl_resistance", 3, 0)))
+      score_Seedling_genompredres <- score_Seedling_genompredres/3
+      
+      score_Geno_conf <- ifelse(input$Geno_conf == "low_geno_conf", 1,
+                                ifelse(input$Geno_conf == "mod_geno_conf", 2,
+                                       ifelse(input$Geno_conf == "high_geno_conf", 3, 0)))
+      score_Geno_conf <- score_Geno_conf/3
+      
+      if (score_Geno_conf > 0){
+        score_Adult_genompredres <- score_Adult_genompredres * score_Geno_conf
+        score_Seedling_genompredres <- score_Seedling_genompredres * score_Geno_conf
+      }
+      
+      ## If crossed out - revert score to 0
+      is_disabled <- function(x) {ifelse(is.null(x), 0, x)}
+      
+      if (is_disabled(input$SDM_fut_disabled) == 1) score_SDM_fut <- 0
+      if (is_disabled(input$SDM_curr_disabled) == 1) score_SDM_curr <- 0
+      if (is_disabled(input$Site_DisPres_p_disabled) == 1) score_Site_DisPres <- 0
+      if (is_disabled(input$Site_DisPres_p_disabled) == 1) score_Water_pres <- 0
+      if (is_disabled(input$Edge_eff_p_disabled) == 1) score_Edge_eff <- 0
+      if (is_disabled(input$Time_lastburn_p_disabled) == 1) score_Time_lastburn <- 0
+      if (is_disabled(input$Burn_severity_p_disabled) == 1) score_Burn_severity <- 0
+      if (is_disabled(input$Adult_genompredres_p_disabled) == 1) score_Adult_genompredres <- 0
+      if (is_disabled(input$Seedling_genompredres_p_disabled) == 1) score_Seedling_genompredres <- 0
+      if (is_disabled(input$Geno_conf_p_disabled) == 1) score_Geno_conf <- 0
+      
+      ## Calculate scores
+      total_score = c(score_Site_DisPres, 
+                        score_Water_pres, 
+                        score_Edge_eff,
+                        score_Time_lastburn,
+                        score_Burn_severity,
+                        score_Adult_genompredres,
+                        score_Seedling_genompredres,
+                        score_Geno_conf)
+      
+      score_counted <- sum(total_score)/sum(sum(total_score>0))
+      
+      output$risk_score <- renderText({
+        score_counted
+      })
+    })
+    
+    #######################################################################
+    
+    # Future current tab
+    first_visit_future <- reactiveVal(TRUE) 
+    
+    output$map_2 <- renderLeaflet({
+      leaflet() %>%
+        addTiles() %>%
+        addPolygons(data = maxent_studyarea, color = "black", weight = 1, fill = FALSE, group = "Outline")
+    })
+    
+    observeEvent(input$tabs, {
+      if (input$tabs == "Future projections" && first_visit_future()) { 
+        selected_raster_fut <- get("maxent_MQuin2021-2040_126")
+        color_pal_fut <- colorNumeric(palette = pal_mq(20), domain = values(selected_raster_fut), na.color = "transparent")
+        
+        leafletProxy("map_2") %>%
+          #addProviderTiles(providers$CartoDB.Positron) %>%
+          addPolygons(data = maxent_studyarea, color = "black", weight = 1, fill = FALSE, group = "Outline") %>% 
+          addRasterImage(selected_raster_fut, colors = pal_mq(20), opacity = 0.8, group = input$layer_fut) %>%
+          addLegend(position = "topright", pal = color_pal_fut, 
+                    values = values(selected_raster_fut), title = "SDM value", group = input$layer_fut)
+      }
+    })
+
+    
+    observe({req(input$layer_fut, input$year_clust, input$ssp)  # Ensure inputs are available
+      
+      species_fut <- gsub("_fut", "", input$layer_fut) 
+      raster_name_fut <- paste0("maxent_", species_fut, input$year_clust, "_", input$ssp) 
+      selected_raster_fut <- get(raster_name_fut) 
+      
+      raster_name_curr <- paste0("maxent_", species_fut) 
+      selected_raster_curr <- get(raster_name_curr)
+      
+      selected_palette_fut <- switch(input$layer_fut,
+                                     "MQuin_fut" = pal_mq(20),
+                                     "MR_fut" = pal_mr(20),
+                                     "intersection_fut" = pal_int(20))
+      
+      color_pal_fut <- colorNumeric(palette = selected_palette_fut, domain = values(selected_raster_fut), na.color = "transparent")
+      
+      
+      if (!is.null(input$fut_show_both) && input$fut_show_both == "fut_hide_pres") {
+        leafletProxy("map_2") %>%
+          clearImages() %>%
+          clearControls() %>%
+          addRasterImage(selected_raster_fut, colors = selected_palette_fut, opacity = 0.8, group = input$layer_fut) %>%
+          addLegend(position = "topright", pal = color_pal_fut, 
+                    values = values(selected_raster_fut), title = "SDM value", group = input$layer_fut)
+      }
+      
+      if (!is.null(input$fut_show_both) && input$fut_show_both == "fut_show_pres") {
+        
+        # Raster of difference (future - current)
+        fut_pres_diff <- selected_raster_fut - selected_raster_curr
+        
+        # Color palette for difference (centered around 0)
+        pal_int_fut <- colorRampPalette(c('#261323', 'deeppink4', "white", "darkolivegreen", "#1b2613"))
+        color_pal_fut <- colorNumeric(palette = pal_int_fut(20), domain = c(-1.3,1.2), na.color = "transparent") # Range set with biggest diff observed, manually set for static color scale
+        
+        # Plot the raster of differences
+        leafletProxy("map_2") %>%
+          clearImages() %>%
+          clearControls() %>%
+          addRasterImage(fut_pres_diff, colors = color_pal_fut, opacity = 0.8, group = input$layer_fut) %>%
+          addLegend(position = "topright", pal = color_pal_fut, 
+                    values = c(-.71,1.2), title = "Difference in SDM value", group = input$layer_fut)
+      }
+
+    })
+    
+    
 }
