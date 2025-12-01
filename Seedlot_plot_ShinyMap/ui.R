@@ -14,6 +14,8 @@ library(htmlwidgets) # Extra additions for UI (html)
 library(tidyverse) # Data wrangling
 library(ggridges) # GGplot geom ridges
 library(plotly) # Plot output
+library(waiter)
+
 
 setwd("~/Uni/Doctorate/Ch Seedlot_plot_data/")
 LoadedinData <- read.csv("data/final_seedloty_plot.csv")
@@ -229,13 +231,18 @@ tabPanel("Site risk",
          
          fluidRow(
            hr(),
-           column(12,
+           column(6,
                   div(style = "display:flex; flex-direction: column; align-items: center;",
                       textInput("site_name", "Site name (for report):", value = ""),
-                      textInput("latitude", "Site Latitude:", value = ""),
-                      textInput("longitude", "Site Longitude:", value = "")
+                      textInput("latitude_risk", "Site Latitude:", value = ""),
+                      textInput("longitude_risk", "Site Longitude:", value = "")
                   )
            ),
+           
+           column (6,
+                   p("Click to select or type in location decimal coordinates"),
+                   leafletOutput("map_siterisk", height = "30vh")
+                   ),
            hr(),
            
            column(9,
@@ -344,7 +351,8 @@ tabPanel("Site risk",
                   hr(),
                   
                   div(style = "display:flex; flex-direction: column; align-items: center;",
-                      h3("Risk score"), textOutput("risk_score", inline = TRUE),
+                      p(span("Risk score", uiOutput("risk_score", container = span), style = "font-weight: bold; font-size: 1em;")),
+                      br(),
                       actionButton("calculate_score", "Generate"),
                       
                   ),

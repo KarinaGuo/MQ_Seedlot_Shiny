@@ -679,10 +679,63 @@ function(input, output, session) {
     
     # Site risk tab ######################################################################
 
+    ## Add click and point map 
+    
+    output$map_siterisk <- renderLeaflet({
+      leaflet() %>%
+        setView(lng=151.20990, lat=-33.865143, zoom=8) %>% 
+        addProviderTiles(providers$CartoDB.Positron) %>%
+        addPolygons(data = maxent_studyarea, color = "black", weight = 1, fill = FALSE, group = "Outline")
+      })
+    
+    coords <- reactiveValues(lat = NULL, lng = NULL)
+    
+    observeEvent(input$map_siterisk_click, {
+      
+      # Register map click for location
+      req(input$map_siterisk_click)
+      coords$lat <- input$map_siterisk_click$lat
+      coords$lng <- input$map_siterisk_click$lng
+      
+      updateTextInput(session, "latitude_risk",  value = round(coords$lat, 6))
+      updateTextInput(session, "longitude_risk", value = round(coords$lng, 6))
+      
+    })
+    
+    ## Update coords with text input
+    
+    observeEvent(input$latitude_risk, {
+      req(input$latitude_risk)
+      val <- (as.numeric(input$latitude_risk))
+      coords$lat <- val
+    })
+    
+    observeEvent(input$longitude_risk, {
+      req(input$longitude_risk)
+      val <- (as.numeric(input$longitude_risk))
+      coords$lng <- val
+    })
+    
+    ## Update map plot from click OR text
+    observe({
+      req(coords$lat, coords$lng)
+      
+      leafletProxy("map_siterisk") %>%
+        clearGroup("selection") %>%
+        addCircleMarkers(
+          lng = coords$lng,
+          lat = coords$lat,
+          radius = 3,
+          color = "darkgreen",
+          fillOpacity = 0.5,
+          group = "selection"
+        )
+    })
+    
     SDM_curr_overlap_score <- reactive({
       # Convert input to numeric
-      lat <- as.numeric(input$latitude)
-      lon <- as.numeric(input$longitude)
+      lat <- as.numeric(coords$lat)
+      lon <- as.numeric(coords$lng)
       
       # Check if inputs are valid numbers
       if (is.na(lat) || is.na(lon)) {
@@ -694,9 +747,10 @@ function(input, output, session) {
     })
   
     output$SDM_curr_overlap_score <- renderText({
+      req(coords$lat & coords$lng)
       value <- SDM_curr_overlap_score()
-      if (is.null(value)){
-        NULL
+      if (is.null(value) | is.na(value)){
+        "Outside of SDM map"
       } else {
         round(value, 3) 
       }
@@ -704,12 +758,12 @@ function(input, output, session) {
   
     SDM_fut_overlap_score <- reactive({
       # Convert input to numeric
-      lat <- as.numeric(input$latitude)
-      lon <- as.numeric(input$longitude)
+      lat <- as.numeric(coords$lat)
+      lon <- as.numeric(coords$lng)
       
       # Check if inputs are valid numbers
       if (is.na(lat) || is.na(lon)) {
-        return(NULL)  # or some default/error value
+        return(NULL)  
       }
       
       # Call the extract function
@@ -717,9 +771,10 @@ function(input, output, session) {
     })
     
     output$SDM_fut_overlap_score <- renderText({
+      req(coords$lat & coords$lng)
       value <- SDM_fut_overlap_score()
-      if (is.null(value)){
-        NULL
+      if (is.null(value) | is.na(value)){
+        "Outside of SDM map"
       } else {
         round(value, 3) 
       }
@@ -741,7 +796,7 @@ function(input, output, session) {
       score_Edge_eff <- score_Edge_eff/2
       
       score_Time_lastburn <- if (input$Time_lastburn != "No Burn") {(year(Sys.Date()) - as.numeric(input$Time_lastburn))} else {0}
-      score_Time_lastburn <- score_Time_lastburn/15
+      score_Time_lastburn <- 15-score_Time_lastburn/15
       
       score_Burn_severity <- ifelse(input$Burn_severity == "low_burn_severity", 1,
                                 ifelse(input$Burn_severity == "mod_burn_severity", 2,
@@ -797,10 +852,17 @@ function(input, output, session) {
                                    ifelse(score_counted >= 0.3 & score_counted < 0.6, "Moderate",
                                           ifelse(score_counted >= 0.6, "High", "No score available")))
       
+      text_color <- switch(score_counted_cat,
+                           "High"     = "#8c0d0d",
+                           "Moderate" = "#a37d22", 
+                           "Low"      = "#2f6915",
+                           "black") # Default color if "No score available"
       
-      output$risk_score <- renderText({
-        score_counted_cat
+      # Return the text wrapped in HTML with the color applied
+      output$risk_score <- renderUI({
+        span(score_counted_cat, style = paste0("color:", text_color, "; font-weight: bold; font-size: 1em;"))
       })
+      
     })
     
 #  Future current tab ######################################################################
@@ -1023,9 +1085,9 @@ function(input, output, session) {
       
       map_rep_pal <- colorNumeric("YlOrRd", domain = data_repo_df$Mean_score)
        
-      if (!is.null(input$latitude) && !is.na(input$latitude)) { ## If user sets site
-       lat <- as.numeric(input$latitude)
-       lon <- as.numeric(input$longitude)
+      if (!is.null(input$latitude_risk) && !is.na(input$longitude_risk)) { ## If user sets site 
+       lat <- as.numeric(input$latitude_risk)
+       lon <- as.numeric(input$longitude_risk)
         
         leafletProxy("map_rep") %>% 
           addCircleMarkers(data = data_repo_df, lng = ~Long, lat = ~Lat, fillColor = map_rep_pal(data_repo_df$Mean_score), color= "black", weight=1, radius = 3, popup = ~Seedlot, stroke=TRUE) %>%
