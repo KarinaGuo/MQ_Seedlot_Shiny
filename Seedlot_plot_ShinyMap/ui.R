@@ -1,14 +1,21 @@
 library(tidyr) # data wrangling
 library(raster) # Map
+library(sf) # Map
 library(shiny) # shiny base package
 library(shinycssloaders) # load symbol
 library(leaflet) # Map
 library(shinyBS) # layout
 library(waiter) # loading sign reactively
 library(DT) # Render datatable
-library(shinyjs)
+library(shinyjs) # Allowing java
+library(shinyWidgets) # Extra additions for UI
+library(lubridate) # Using year() for current year
+library(htmlwidgets) # Extra additions for UI (html)
+library(tidyverse) # Data wrangling
+library(ggridges) # GGplot geom ridges
+library(plotly) # Plot output
 
-setwd("~/Uni/Doctorate/Samples/Seedlot_plot_data/")
+setwd("~/Uni/Doctorate/Ch Seedlot_plot_data/")
 LoadedinData <- read.csv("data/final_seedloty_plot.csv")
 
 # Load future projection data
@@ -40,7 +47,6 @@ fluidPage(
            tabPanel("Information on plots",
                     fluidPage(
                       titlePanel("A short How To:"),
-                      
                       sidebarPanel(p("Insert nav, keywords, definitions")),
                       
                       mainPanel(
@@ -72,8 +78,8 @@ fluidPage(
                     )
            ),
 
-#######################################################################
-## Tab: Seedlot plot
+# Tab: Seedlot plot #######################################################################
+
 tabPanel("Seed lot map",
 
 fluidPage(
@@ -168,7 +174,7 @@ fluidPage(
       withSpinner(color="grey60",
                   leafletOutput("map", width = "100%", height = "70vh"),
       ),
-      
+   
       ## Add generate report button
       hidden(textInput("have_selection", "sel", value = "FALSE")),
       conditionalPanel(condition = "input.have_selection == 'TRUE'",
@@ -195,10 +201,11 @@ fluidPage(
 )
 ),
 
-###############################################
-# Tab: Site risk
-tags$head(
-  tags$style(HTML("
+# Tab: Site risk ###############################################
+
+tabPanel("Site risk",
+         tags$head(
+           tags$style(HTML("
     .disabled-item {
       color: #999999;
       text-decoration: line-through;
@@ -208,8 +215,8 @@ tags$head(
       cursor: pointer;
     }
   ")),
-  
-  tags$script(HTML("
+           
+           tags$script(HTML("
       $(document).on('click', '.clickable', function() {
         let id = $(this).attr('id');
         $(this).toggleClass('disabled-item');
@@ -218,17 +225,24 @@ tags$head(
         Shiny.setInputValue(id + '_disabled', isDisabled, {priority: 'event'});
       });
   "))
-),
-
-tabPanel("Site risk",
+         ),
+         
          fluidRow(
-           
-           textInput("latitude", "Site Latitude: ", value = ""),
-           textInput("longitude", "Site Longitude: ", value = ""),
-           
-           em("Press on any score to remove from calculation"),
+           hr(),
+           column(12,
+                  div(style = "display:flex; flex-direction: column; align-items: center;",
+                      textInput("site_name", "Site name (for report):", value = ""),
+                      textInput("latitude", "Site Latitude:", value = ""),
+                      textInput("longitude", "Site Longitude:", value = "")
+                  )
+           ),
            hr(),
            
+           column(9,
+             p(em("Hover over titles for more information", style = "text-align:center;")),
+             p(em("Press on any score to remove from calculation", style = "text-align:center;"))
+             ),
+             
            column(6,
                   h3("Site scoring"),
                   
@@ -237,6 +251,7 @@ tabPanel("Site risk",
                   
                   div(
                     span(id="Site_DisPres_p", class="clickable", strong("Site Disease presence: ")),
+                    title = "Have the site been observed to have high diease presence?",
                     radioButtons("Site_DisPres", NULL, 
                                  choices = c("Low" = "low_site_dispres",
                                              "High" = "high_site_dispres",
@@ -246,6 +261,7 @@ tabPanel("Site risk",
                   
                   div(
                     span(id="Water_pres_p", class="clickable", strong("Water body nearby? ")), 
+                    title = "Is there a source of water nearby? \n It increases relative humidity and thus renders greater MR risk",
                     radioButtons("Water_pres", NULL,
                                  choices = c("Yes" = "pres_water",
                                              "No" = "notpres_water",
@@ -255,6 +271,7 @@ tabPanel("Site risk",
                   
                   div(
                     span(id="Edge_eff_p", class="clickable", strong("Edge effect or/and foot traffic present? ")), 
+                    title = "Is the population fragmented and sees high people traffic? \n Fragmentation or open forest may increase spore flux",
                     radioButtons("Edge_eff", NULL,
                                  choices = c("Yes" = "pres_edge",
                                              "No" = "notpres_edge",
@@ -264,6 +281,7 @@ tabPanel("Site risk",
                   
                   div(
                     span(id="Time_lastburn_p", class="clickable", strong("Time since last burnt (>2010): ")),
+                    title = "If the site was burnt recently, the population exhibits higher abiotic stress",
                     sliderTextInput("Time_lastburn", NULL,
                                     choices = c("No Burn", seq(from = 2010, to = year(Sys.Date()))),
                                     grid = TRUE,
@@ -273,6 +291,7 @@ tabPanel("Site risk",
                   
                   div(
                     span(id="Burn_severity_p", class="clickable", strong("Severity of burn: ")),
+                    title = "How severe was the most recent burn?",
                     radioButtons("Burn_severity", NULL, 
                                  choices = c("Low" = "low_burn_severity",
                                              "Moderate" = "mod_burn_severity",
@@ -288,6 +307,7 @@ tabPanel("Site risk",
                   
                   div(
                     span(id="Adult_genompredres_p", class="clickable", strong("Adult genomic prediction of resistance: ")),
+                    title = "If genotyping has been done across adults are there resistance alleles in the population (% resistant in lower third)",
                     radioButtons("Adult_genompredres", NULL,
                                  choices = c("Low" = "low_adult_resistance",
                                              "Moderate" = "mod_adult_resistance",
@@ -298,6 +318,7 @@ tabPanel("Site risk",
                   
                   div(
                     span(id="Seedling_genompredres_p", class="clickable", strong("Seedling genomic prediction of resistance: ")),
+                    title = "If genotyping has been done across seedlings are there resistance alleles in the population (% resistant in lower third)",
                     radioButtons("Seedling_genompredres", NULL,
                                  choices = c("Low" = "low_seedl_resistance",
                                              "Moderate" = "mod_seedl_resistance",
@@ -310,6 +331,7 @@ tabPanel("Site risk",
                     condition = "any(!input.Seedling_genompredres == 'unknown_seedl_resistance', !input.Adult_genompredres == 'unknown_adult_resistance')",
                     div(
                       span(id="Geno_conf_p", class="clickable", strong("Genotyping confidence: ")),
+                      title = "How confident does the genotyping reflect the site? \n How many individuals were genotyped?",
                       radioButtons("Geno_conf", NULL,
                                    choices = c("Low" = "low_geno_conf",
                                                "Moderate" = "mod_geno_conf",
@@ -317,22 +339,22 @@ tabPanel("Site risk",
                                                "Unknown" = "unknown_seedl_resistance"),
                                    selected = "unknown_seedl_resistance")
                     )
+                  )),
+           column(12,
+                  hr(),
+                  
+                  div(style = "display:flex; flex-direction: column; align-items: center;",
+                      h3("Risk score"), textOutput("risk_score", inline = TRUE),
+                      actionButton("calculate_score", "Generate"),
+                      
                   ),
-                  
-                  actionButton("calculate_score", "Calculate risk"),
-                  
-                  conditionalPanel(
-                    condition = "input.calculate_score > 0",
-                    h4("Risk score:"),
-                    textOutput("risk_score")
-                  )
+                  hr(),
            )
          )
 ),
 
 
-###############################################
-# Tab: Future Projections
+# Tab: Future Projections ###############################################
 tabPanel("Future projections",
          sidebarLayout(
            sidebarPanel(
@@ -359,7 +381,7 @@ tabPanel("Future projections",
                              grid = TRUE),
              
              br(),
-             radioButtons("fut_show_both", "Show present distribution?",
+             radioButtons("fut_show_both", "Overlay present distribution difference?",
                           choices = c("Show" = "fut_show_pres",
                                       "Hide" = "fut_hide_pres"),
                           selected = "fut_hide_pres")
@@ -370,6 +392,78 @@ tabPanel("Future projections",
                leafletOutput("map_2", height = "90vh"))
            )
          )
-)
+),
+
+# Tab: Generate report ###############################################
+
+tabPanel("Summary results",
+        titlePanel("Generated Report:"),
+        
+        useShinyjs(), 
+         sidebarPanel(p("Insert nav")),
+         mainPanel(
+           #leafletOutput("map_rep"),
+           
+           
+           h3("No seed lots selected from map", id = "no_selection"),
+           div(
+             id = "selection_panel",
+                              
+             h3("Selected seed lots", style = "text-align:center;"),
+             br(),
+             
+             h4("Table of Selected Seed lot"),
+             h5("Rust assay score of seed lots"),
+             DTOutput("marker_table_1_repo"),
+             hr(),
+             h5("Genomic prediction score of seed lots"),
+             DTOutput("marker_table_2_repo"),
+             hr(),br(),
+             
+             h4("Plot of seedlots characteristics"),
+             h5("Rust assay score of seed lots"),
+             plotOutput("seedlot_rustass_plot_geomridge", height = "100%"),
+             hr(),
+             h5("Genomic prediction score of seed lots"),
+             plotOutput("seedlot_genompred_plot_geomridge", height = "100%"),
+             hr(),br(),
+             
+             h4("Plot of seedlots selected and marker of site location"),
+             leafletOutput("map_rep", height = "60vh"),
+             
+             (div(
+               id = "site_info",
+               
+               br(),hr(),br(),
+               
+               h3("Site information", style = "text-align:center;"),
+               
+               p("Site title, location"),
+               p("Inputted survey res"),
+               
+               br(),hr(),br(),
+               
+               h3("Future prediction", style = "text-align:center;"),
+               p("Plot of intersection of future climate grid of all ssps and years"),
+               
+               br(),hr(),br(),
+               
+               h3("Simulations of restoration", style = "text-align:center;"),
+               p("Plot of intersection of future climate")
+               
+               
+               # p("Information on what the different levels of resistance means and measurement"),
+               # p("Drop down toggle on more information"),
+               # br(),hr(),br(),
+               
+               
+             ))
+           )
+           
+           
+           )
+
+         )
+  
   )
 )

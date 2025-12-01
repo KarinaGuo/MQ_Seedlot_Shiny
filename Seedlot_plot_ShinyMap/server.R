@@ -1,4 +1,4 @@
-library(tidyverse) # data wrangling
+library(tidyr) # data wrangling
 library(raster) # Map
 library(sf) # Map
 library(shiny) # shiny base package
@@ -6,15 +6,24 @@ library(shinycssloaders) # load symbol
 library(leaflet) # Map
 library(shinyBS) # layout
 library(waiter) # loading sign reactively
-library(shinyjs) # shiny java
 library(DT) # Render datatable
-library(shinyWidgets) # Confirmation messages 
-library(htmlwidgets)
+library(shinyjs) # Allowing java
+library(shinyWidgets) # Extra additions for UI
+library(lubridate) # Using year() for current year
+library(htmlwidgets) # Extra additions for UI (html)
+library(tidyverse) # Data wrangling
+library(ggridges) # GGplot geom ridges
+library(plotly) # Plot output
 
-setwd("~/Uni/Doctorate/Samples/Seedlot_plot_data/")
+setwd("~/Uni/Doctorate/Ch Seedlot_plot_data/")
 
 # Load in datasets used
-LoadedinData <- read.csv("data/final_seedloty_plot.csv")
+## Files for report gen (keep at top)
+source(file = "Seedlot_plot_ShinyMap/Seedlot_plot_shiny.R")
+
+LoadedinData <- read.csv("data/final_seedloty_plot.csv") %>% unique()
+LoadedinData <- LoadedinData[!duplicated(LoadedinData$Seedlot),]
+
 # Load current projection data
 maxent_MQuin <- raster("data/maxent_MQuin.tiff")
 maxent_MR <- raster("data/maxent_MR.tiff")
@@ -60,13 +69,12 @@ pal_mr <- colorRampPalette(c("grey95","#C6DC96","#C6DC96","darkolivegreen","yell
 pal_mq <- colorRampPalette(c("grey95","#EAC8BF","#EAC8BF","orange","forestgreen"))
 pal_int <- colorRampPalette(c("grey95","#C6DC96","#C6DC96","#45B055","#4870BD", "deeppink4"))
 
-############################################################################################
+
 
 function(input, output, session) {
+  #Seed lot map plots  ###########################################################################################  
   
-  
-  ######################################## Seed lot map plots (renders 'map')
-  ########### Set initial render
+  # Set initial render
   # Track the first visit to the tab 
   first_visit <- reactiveVal(TRUE) 
   
@@ -527,6 +535,7 @@ function(input, output, session) {
     #   }
     # })
   
+    
     #########
     LoadedinData_rounded <- LoadedinData %>%
       mutate_if(is.numeric, round, digits = 2)
@@ -658,20 +667,18 @@ function(input, output, session) {
     observeEvent(input$confirm_report, {
       
       req(input$confirm_report)
-      selected_seedlot_data <- LoadedinData_rounded %>% 
+      selected_seedlot_data_allrepo <- LoadedinData_rounded %>% 
         filter(Seedlot %in% selected_seedlots$seedlot_ID) %>% 
         select(Seedlot, latitude, longitude, Seedling_number_rustassay,	Mean_seedling_score_rustassay, Sd_seedling_score_rustassay, MatLine_Genompred , Seedling_number_genompred, Mean_seedling_score_genompred, Sd_seedling_score_genompred) %>% 
         distinct(Seedlot, .keep_all = TRUE)
-      colnames(selected_seedlot_data) <- c("Seed lot", "Latitude collected", "Longitude collected", "Number of seedlings scored (Assay)", "Mean seedling score (Assay)", "Seedling score SD (Assay)", "Maternal line score (GenomPred)", "Number of seedlings scored (GenomPred)", "Mean seedling score (GenomPred)", "Seedling score SD (GenomPred)")
+      colnames(selected_seedlot_data_allrepo) <- c("Seed lot", "Latitude collected", "Longitude collected", "Number of seedlings scored (Assay)", "Mean seedling score (Assay)", "Seedling score SD (Assay)", "Maternal line score (GenomPred)", "Number of seedlings scored (GenomPred)", "Mean seedling score (GenomPred)", "Seedling score SD (GenomPred)")
       
-      write.csv(selected_seedlot_data, file = paste0("Selected_seedlots_",date,".csv"), row.names=FALSE)
+      write.csv(selected_seedlot_data_allrepo, file = paste0("Selected_seedlots_",date,".csv"), row.names=FALSE)
       showNotification("Report generated.", type = "message")
     })
     
-    #######################################################################
-    # Site risk tab
-    #Server:
-    
+    # Site risk tab ######################################################################
+
     SDM_curr_overlap_score <- reactive({
       # Convert input to numeric
       lat <- as.numeric(input$latitude)
@@ -785,21 +792,25 @@ function(input, output, session) {
                         score_Seedling_genompredres,
                         score_Geno_conf)
       
-      score_counted <- sum(total_score)/sum(sum(total_score>0))
+      score_counted <- as.numeric(sum(total_score)/sum(sum(total_score>0)))
+      score_counted_cat <- ifelse (score_counted < 0.3, "Low", 
+                                   ifelse(score_counted >= 0.3 & score_counted < 0.6, "Moderate",
+                                          ifelse(score_counted >= 0.6, "High", "No score available")))
+      
       
       output$risk_score <- renderText({
-        score_counted
+        score_counted_cat
       })
     })
     
-    #######################################################################
+#  Future current tab ######################################################################
     
     # Future current tab
     first_visit_future <- reactiveVal(TRUE) 
     
     output$map_2 <- renderLeaflet({
       leaflet() %>%
-        addTiles() %>%
+        addProviderTiles(providers$CartoDB.Positron) %>%
         addPolygons(data = maxent_studyarea, color = "black", weight = 1, fill = FALSE, group = "Outline")
     })
     
@@ -864,5 +875,167 @@ function(input, output, session) {
 
     })
     
+    #  Report generation tab ######################################################################
+    observe({
+      if (length(selected_seedlots$seedlot_ID) > 0) { 
+        shinyjs::show("selection_panel")
+        shinyjs::hide("no_selection")
+      } else {
+        shinyjs::hide("selection_panel")
+        shinyjs::show("no_selection")
+      }
+    })
     
+    observe({
+      if (any(!is.null(input$latitude), !is.na(input$latitude))) { 
+        shinyjs::show("site_info")
+      } else {
+        shinyjs::hide("site_info")
+      }
+    })
+    
+    ##### Plot of seedlots characteristics
+    selected_seedlot_rustassay_score_allrepo <- reactive({
+      req(length(selected_seedlots$seedlot_ID) > 0)
+      
+      left_join(mat_line_rustassay_score, LoadedinData) %>% 
+        dplyr::filter(Seedlot %in% selected_seedlots$seedlot_ID) %>% 
+        dplyr::filter(!is.na(Seedling_score_rustassay))
+    })
+    
+    mean_matLine_RustAssay <- reactive({
+      df <- selected_seedlot_rustassay_score_allrepo()
+      req(nrow(df) > 0)
+      
+      df %>% 
+        dplyr::select(Seedlot, Mean_seedling_score_rustassay) %>% 
+        dplyr::distinct()
+    })
+    
+    selected_seedlot_genompred_score_allrepo <- reactive({
+      req(length(selected_seedlots$seedlot_ID) > 0)
+      
+      left_join(mat_line_genompred_score, LoadedinData) %>% 
+        dplyr::filter(Seedlot %in% selected_seedlots$seedlot_ID)%>% 
+        dplyr::filter(!is.na(Seedling_score_genompred))
+    })
+    
+    mean_matLine_GenomPred <- reactive({
+      df <- selected_seedlot_genompred_score_allrepo()
+      req(nrow(df) > 0)
+      
+      df %>% 
+        dplyr::select(Seedlot, Mean_seedling_score_genompred) %>% 
+        dplyr::distinct()
+    })
+    
+    mean_matLine_MatLineGenomPred <- reactive({
+      df <- selected_seedlot_genompred_score_allrepo()
+      req(nrow(df) > 0)
+      
+      df %>% 
+        dplyr::select(Seedlot, MatLine_Genompred) %>% 
+        dplyr::distinct()
+    })
+      
+  
+    observe({
+      req(length(selected_seedlots$seedlot_ID) > 0)
+      
+      output$seedlot_rustass_plot_geomridge <- renderPlot({
+        ggplot() +
+          geom_density_ridges2(data=selected_seedlot_rustassay_score_allrepo(), colour="grey40", alpha = 0.9, aes(x = Seedling_score_rustassay, y=Seedlot, fill=Seedling_number_rustassay, alpha = 0.7), scale =1.3) +
+          #geom_hline(data = mean_matLine_RustAssay(), aes(yintercept = as.numeric(factor(Seedlot)), yend = as.numeric(factor(Seedlot)) + 0.8), colour = "darkred", linewidth = 0.5, linetype="dashed") +
+          #geom_segment(data = mean_matLine_RustAssay(), aes(x = 0, xend = Mean_seedling_score_rustassay, y = as.numeric(factor(Seedlot)), yend = as.numeric(factor(Seedlot))), colour = "darkred", linewidth = 0.5) +
+          geom_segment(data = mean_matLine_RustAssay(), aes(x = Mean_seedling_score_rustassay, xend = Mean_seedling_score_rustassay, y = as.numeric(factor(Seedlot)), yend = as.numeric(factor(Seedlot)) + 0.8), colour = "red", linewidth = 0.5, linetype="dashed") +
+          labs(title = "Characterising rust resistance assay scores", 
+               subtitle="Red dashed line represents mean seedling rust assay score of seed lot",
+               y = "Seed lot ID",
+               x = "Raw assay score",
+               fill = "Number assayed") +
+          theme_bw() +
+          scale_fill_viridis_c()
+        }, height = function() {
+          30 * length(selected_seedlots$seedlot_ID)
+        })
+      
+      output$seedlot_genompred_plot_geomridge <- renderPlot({
+        ggplot() +
+          geom_density_ridges2(data=selected_seedlot_genompred_score_allrepo(), colour="grey40", alpha = 0.9, aes(x = Seedling_score_genompred, y=Seedlot, fill=Seedling_number_genompred), scale =1.3) +
+          #geom_hline(data = mean_matLine_GenomPred(), aes(yintercept = as.numeric(factor(Seedlot))), colour = "darkblue", linewidth = 0.5, linetype="dashed") +
+          #geom_segment(data = mean_matLine_GenomPred(), aes(x = 0, xend = Mean_seedling_score_genompred, y = as.numeric(factor(Seedlot)), yend = as.numeric(factor(Seedlot)) + 0.5), colour = "darkblue", linewidth = 0.5) +
+          geom_segment(data = mean_matLine_GenomPred(), aes(x = Mean_seedling_score_genompred, xend = Mean_seedling_score_genompred, y = as.numeric(factor(Seedlot)), yend = as.numeric(factor(Seedlot)) + 0.8), colour = "purple", linewidth = 0.5, linetype="dotted") +
+          geom_segment(data = mean_matLine_MatLineGenomPred(), aes(x = MatLine_Genompred, xend = MatLine_Genompred, y = as.numeric(factor(Seedlot)), yend = as.numeric(factor(Seedlot)) + 0.8), colour = "blue", linewidth = 0.5, linetype="dashed") +
+          labs(title = "Characterising rust resistance assay scores", 
+               subtitle="Blue dashed line represents mean seedling genomic prediction score of seed lot\nPurple dotted line represents the maternal line's genomic prediction score",
+               y = "Seed lot ID",
+               x = "Genomic prediction score",
+               fill = "Number assayed") +
+          theme_bw() +
+          scale_fill_viridis_c()
+        }, height = function() {
+          30 * length(selected_seedlots$seedlot_ID)
+        })
+    })
+    
+    #### Table of seedlots
+    
+    output$marker_table_1_repo <- renderDT({
+      datatable(
+        selected_seedlot_data(),
+        selection = "single",   # single row click
+        rownames = FALSE,
+        options = list(
+          paging = TRUE,
+          searching = TRUE,
+          ordering = TRUE
+        )
+      )
+    })
+    
+    output$marker_table_2_repo <- renderDT({
+      datatable(
+        selected_seedlot_data_2(),
+        selection = "single",   # single row click
+        rownames = FALSE,
+        options = list(
+          paging = TRUE,
+          searching = TRUE,
+          ordering = TRUE
+        )
+      )
+    })
+    
+    ##### Plot of seedlots on map
+     observe({ # Delay load until map made
+      req(input$tabs == "Summary results" & length(selected_seedlots$seedlot_ID) > 0)
+      
+      output$map_rep <- renderLeaflet({
+        leaflet() %>%
+          addTiles() %>%
+          addCircleMarkers(data=LoadedinData, lng = ~longitude, lat = ~latitude, fillColor="black", radius = 1.5, opacity=0.3, stroke=FALSE) %>% 
+          addPolygons(data = maxent_studyarea, color = "black", weight = 1, fill = FALSE, group = "Outline") 
+      })
+      
+      data_repo <- selected_seedlot_data()
+      colnames (data_repo) <- c("Seedlot", "Lat", "Long", "N", "Mean_score", "Sd_score")
+      data_repo_df <- data.frame(data_repo)
+      
+      map_rep_pal <- colorNumeric("YlOrRd", domain = data_repo_df$Mean_score)
+       
+      if (!is.null(input$latitude) && !is.na(input$latitude)) { ## If user sets site
+       lat <- as.numeric(input$latitude)
+       lon <- as.numeric(input$longitude)
+        
+        leafletProxy("map_rep") %>% 
+          addCircleMarkers(data = data_repo_df, lng = ~Long, lat = ~Lat, fillColor = map_rep_pal(data_repo_df$Mean_score), color= "black", weight=1, radius = 3, popup = ~Seedlot, stroke=TRUE) %>%
+          addLegend("bottomright", pal = map_rep_pal, values = data_repo_df$Mean_score, title = "Rust assay score") %>% 
+          addMarkers(lng = lon, lat = lat)
+      } else {
+        leafletProxy("map_rep") %>% 
+          addCircleMarkers(data = data_repo_df, lng = ~Long, lat = ~Lat, fillColor = map_rep_pal(data_repo_df$Mean_score), color= "black", weight=1, radius = 3, popup = ~Seedlot, stroke=TRUE) %>%
+          addLegend("bottomright", pal = map_rep_pal, values = data_repo_df$Mean_score, title = "Rust assay score")
+      }
+      
+    })
 }
