@@ -13,9 +13,9 @@ library(lubridate) # Using year() for current year
 library(htmlwidgets) # Extra additions for UI (html)
 library(tidyverse) # Data wrangling
 library(ggridges) # GGplot geom ridges
-library(plotly) # Plot output
-library(waiter)
-
+library(plotly) # Plot output 
+library(httr)
+library(jsonlite)
 
 setwd("~/Uni/Doctorate/Ch Seedlot_plot_data/")
 LoadedinData <- read.csv("data/final_seedloty_plot.csv")
@@ -417,7 +417,7 @@ tabPanel("Summary results",
            div(
              id = "selection_panel",
                               
-             h3("Selected seed lots", style = "text-align:center;"),
+             h3("Selected Seed Lots", style = "text-align:center;"),
              br(),
              
              h4("Table of Selected Seed lot"),
@@ -439,25 +439,57 @@ tabPanel("Summary results",
              h4("Plot of seedlots selected and marker of site location"),
              leafletOutput("map_rep", height = "60vh"),
              
-             (div(
-               id = "site_info",
+             div(
+               id = "site_info", style = "display:none;",
                
                br(),hr(),br(),
                
-               h3("Site information", style = "text-align:center;"),
+               h3("Site Information", style = "text-align:center;"),
                
-               p("Site title, location"),
-               p("Inputted survey res"),
+               p(strong("Site selected: "), textOutput("site_name_rep",  inline = TRUE)),
+               p(strong("At location: "), textOutput("latitude_risk", inline = TRUE), textOutput("longitude_risk",  inline = TRUE)),
+               br(),
                
-               br(),hr(),br(),
+               h4("Survey scores and site risk recorded"),
                
-               h3("Future prediction", style = "text-align:center;"),
-               p("Plot of intersection of future climate grid of all ssps and years"),
+               column(9,
+                      p(em("Hover over titles for more information", style = "text-align:center;")),
+                      p(em("Press on any score to remove from calculation", style = "text-align:center;"))
+               ),
                
-               br(),hr(),br(),
+               column(6,
+                      h3("Site scoring"),
+                      
+                      span(strong("Current SDM Overlap Score: "),  textOutput("SDM_curr_disabled", inline = TRUE))
+                       
+                      
+                      #   span(
+                      #     strong("Future SDM Overlap Score (2021-2040 SSP126): "), 
+                      #     textOutput("SDM_fut_disabled", inline = TRUE)
+                      #   )
+                      # ),
+                      # 
+                      # div(
+                      #   span(
+                      #     title = "Has the site been observed to have high disease presence?",
+                      #     strong("Site Disease presence: "), 
+                      #     textOutput("Site_DisPres_p_disabled", inline = TRUE)
+                      #   )
+                      # )
+            
                
-               h3("Simulations of restoration", style = "text-align:center;"),
-               p("Plot of intersection of future climate")
+               
+               # p("Inputted survey res"),
+               # 
+               # br(),hr(),br(),
+               # 
+               # h3("Future prediction", style = "text-align:center;"),
+               # p("Plot of intersection of future climate grid of all ssps and years"),
+               # 
+               # br(),hr(),br(),
+               # 
+               # h3("Simulations of restoration", style = "text-align:center;"),
+               # p("Plot of intersection of future climate")
                
                
                # p("Information on what the different levels of resistance means and measurement"),

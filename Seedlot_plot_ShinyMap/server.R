@@ -700,6 +700,24 @@ function(input, output, session) {
       updateTextInput(session, "latitude_risk",  value = round(coords$lat, 6))
       updateTextInput(session, "longitude_risk", value = round(coords$lng, 6))
       
+      # Fetch the location name from Nominatim
+      url <- paste0("https://nominatim.openstreetmap.org/reverse?format=json&lat=", input$map_siterisk_click$lat, "&lon=", input$map_siterisk_click$lng)
+      response <- GET(url, user_agent("R"))  # Nominatim requires a user agent
+      data <- fromJSON(content(response, "text", encoding = "UTF-8"))
+      
+      if (!is.null(data$display_name)) {
+        location <- data$display_name
+        location_shrt <-  sub(", New South Wales, .*?, Australia.*", "", location)
+        location_shrt_2 <- sub("^[^,]*,\\s*", "", location_shrt)
+        
+        updateTextInput(session, "site_name",  value = location_shrt_2)
+      }
+      
+      ## Update stored names for report
+      output$site_name_rep <- renderText ({ location_shrt_2 })
+      output$latitude_risk <- renderText ({ round(coords$lng, 6) })
+      output$longitude_risk <- renderText ({ round(coords$lat, 6) })
+        
     })
     
     ## Update coords with text input
@@ -949,10 +967,14 @@ function(input, output, session) {
     })
     
     observe({
-      if (any(!is.null(input$latitude), !is.na(input$latitude))) { 
-        shinyjs::show("site_info")
-      } else {
+      input$calculate_score
+      
+      #print(input$latitude_risk=="")
+      
+      if (is.null(input$latitude_risk) || is.na(input$latitude_risk) || input$latitude_risk=="") { 
         shinyjs::hide("site_info")
+      } else {
+        shinyjs::show("site_info")
       }
     })
     
@@ -1100,4 +1122,6 @@ function(input, output, session) {
       }
       
     })
+     
+     
 }
