@@ -253,8 +253,8 @@ tabPanel("Site risk",
            column(6,
                   h3("Site scoring"),
                   
-                  p(id="SDM_curr_p", class="clickable", strong("Current SDM Overlap Score: "), textOutput("SDM_curr_overlap_score", inline = TRUE)),
-                  p(id="SDM_fut_p", class="clickable", strong("Future SDM Overlap Score (2021-2040 SSP126): "), textOutput("SDM_fut_overlap_score", inline = TRUE)),
+                  p(id="SDM_curr_p", class="clickable", strong("Current SDM Overlap Score: "), textOutput("SDM_curr_overlap_score_UI", inline = TRUE)),
+                  p(id="SDM_fut_p", class="clickable", strong("Future SDM Overlap Score (2021-2040 SSP126): "), textOutput("SDM_fut_overlap_score_UI", inline = TRUE)),
                   
                   div(
                     span(id="Site_DisPres_p", class="clickable", strong("Site Disease presence: ")),
@@ -448,40 +448,41 @@ tabPanel("Summary results",
                
                p(strong("Site selected: "), textOutput("site_name_rep",  inline = TRUE)),
                p(strong("At location: "), textOutput("latitude_risk", inline = TRUE), textOutput("longitude_risk",  inline = TRUE)),
-               br(),
+               br(),hr(),br(),
                
                h4("Survey scores and site risk recorded"),
+               p(em("Hover over titles for more information", style = "text-align:center;")),
+               p(em("Press on any score to remove from calculation", style = "text-align:center;")),
+                
+               h3("Site scoring"),
                
-               column(9,
-                      p(em("Hover over titles for more information", style = "text-align:center;")),
-                      p(em("Press on any score to remove from calculation", style = "text-align:center;"))
-               ),
+               span(strong("Current SDM Overlap Score: "),  textOutput("SDM_fut_rep", inline = TRUE), "\n"),
+               span(strong("Future SDM Overlap Score (2021-2040 SSP126): "),  textOutput("score_SDM_fut", inline = TRUE)),
+               div(span(title = "Has the site been observed to have high disease presence?", strong("Site Disease presence: "), textOutput("score_Site_DisPres_rep", inline = TRUE))),
+               div(title = "Is there a source of water nearby? \n It increases relative humidity and thus renders greater MR risk", span(strong("Water body nearby? ")),textOutput("score_Water_pres_rep", inline = TRUE)),
+               div(title = "Is the population fragmented and sees high people traffic? \n Fragmentation or open forest may increase spore flux", span(strong("Edge effect or/and foot traffic present? ")),textOutput("score_Edge_eff_rep", inline = TRUE)),
+               div(title = "If the site was burnt recently, the population exhibits higher abiotic stress", span(strong("Time since last burnt (>2010): ")), textOutput("Time_lastburn_p_rep", inline = TRUE)),
+               div(title = "How severe was the most recent burn?", span(strong("Severity of burn: ")), textOutput("score_Burn_severity", inline = TRUE)),
                
-               column(6,
-                      h3("Site scoring"),
-                      
-                      span(strong("Current SDM Overlap Score: "),  textOutput("SDM_curr_disabled", inline = TRUE))
-                       
-                      
-                      #   span(
-                      #     strong("Future SDM Overlap Score (2021-2040 SSP126): "), 
-                      #     textOutput("SDM_fut_disabled", inline = TRUE)
-                      #   )
-                      # ),
-                      # 
-                      # div(
-                      #   span(
-                      #     title = "Has the site been observed to have high disease presence?",
-                      #     strong("Site Disease presence: "), 
-                      #     textOutput("Site_DisPres_p_disabled", inline = TRUE)
-                      #   )
-                      # )
-            
+               h3("Disease scoring"),
+               h4("Were any individuals genotyped (using DArTag)"),
+               
+               div(title = "If genotyping has been done across adults are there resistance alleles in the population (% resistant in lower third)", span(strong("Adult genomic prediction of resistance: ")),textOutput("Adult_genompredres_p_rep", inline = TRUE)),
+               div(title = "If genotyping has been done across adults are there resistance alleles in the population (% resistant in lower third)", span(strong("Seedling genomic prediction of resistance: ")),textOutput("Seedling_genompredres_p_rep", inline = TRUE)),
+               conditionalPanel(
+                 condition = "any(!input.Seedling_genompredres == 'unknown_seedl_resistance', !input.Adult_genompredres == 'unknown_adult_resistance')",
+                   div(title = "How confident does the genotyping reflect the site? \n How many individuals were genotyped?", strong("Genotyping confidence: ", textOutput("Geno_conf_p_rep", inline = TRUE))),
+                   ),
+               
+               h3("Final score"),
+               #span("Site risk score: ", textOutput ("risk_score", inline = TRUE))
+             ),
+    
                
                
-               # p("Inputted survey res"),
-               # 
-               # br(),hr(),br(),
+               p("Inputted survey res"),
+               
+               br(),hr(),br(),
                # 
                # h3("Future prediction", style = "text-align:center;"),
                # p("Plot of intersection of future climate grid of all ssps and years"),
@@ -496,8 +497,6 @@ tabPanel("Summary results",
                # p("Drop down toggle on more information"),
                # br(),hr(),br(),
                
-               
-             ))
            )
            
            

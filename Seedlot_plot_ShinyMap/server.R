@@ -678,7 +678,24 @@ function(input, output, session) {
     })
     
     # Site risk tab ######################################################################
-
+    
+    ## reactive values for scores
+    scores <- reactiveValues(
+      SDM_fut = 0,
+      SDM_curr = 0,
+      Site_DisPres = 0,
+      Water_pres = 0,
+      Edge_eff = 0,
+      Time_lastburn = 0,
+      Burn_severity = 0,
+      Adult_genompredres = 0,
+      Seedling_genompredres = 0,
+      Geno_conf = 0
+    )
+    
+    latest_coords <- reactiveVal(list(lat = NA, lng = NA))
+    
+    
     ## Add click and point map 
     
     output$map_siterisk <- renderLeaflet({
@@ -724,19 +741,22 @@ function(input, output, session) {
     
     observeEvent(input$latitude_risk, {
       req(input$latitude_risk)
-      val <- (as.numeric(input$latitude_risk))
-      coords$lat <- val
+      val <- as.numeric(input$latitude_risk)
+      # Preserve previous lng, update lat
+      latest_coords(list(lat = val, lng = latest_coords()$lng))
     })
     
+    # Update latest_coords from longitude input
     observeEvent(input$longitude_risk, {
       req(input$longitude_risk)
-      val <- (as.numeric(input$longitude_risk))
-      coords$lng <- val
+      val <- as.numeric(input$longitude_risk)
+      # Preserve previous lat, update lng
+      latest_coords(list(lat = latest_coords()$lat, lng = val))
     })
     
     ## Update map plot from click OR text
     observe({
-      req(coords$lat, coords$lng)
+      req(!is.null(coords$lat), !is.null(coords$lng), !is.na(coords$lat), !is.na(coords$lng))
       
       leafletProxy("map_siterisk") %>%
         clearGroup("selection") %>%
@@ -755,17 +775,17 @@ function(input, output, session) {
       lat <- as.numeric(coords$lat)
       lon <- as.numeric(coords$lng)
       
-      # Check if inputs are valid numbers
-      if (is.na(lat) || is.na(lon)) {
-        return(NULL)  # or some default/error value
-      }
-      
-      # Call the extract function
-      extract(maxent_intersection, cbind(lon, lat))
-    })
+      extract(maxent_intersection, cbind(lon, lat)) 
+      })
   
-    output$SDM_curr_overlap_score <- renderText({
-      req(coords$lat & coords$lng)
+    observe({
+      curr_score <- as.numeric(SDM_curr_overlap_score())
+      print(curr_score[1])
+      scores$SDM_curr <- as.numeric(curr_score)
+    })
+    
+    output$SDM_curr_overlap_score_UI <- renderText({
+      req(!is.null(coords$lat), !is.null(coords$lng), !is.na(coords$lat), !is.na(coords$lng))
       value <- SDM_curr_overlap_score()
       if (is.null(value) | is.na(value)){
         "Outside of SDM map"
@@ -778,17 +798,17 @@ function(input, output, session) {
       # Convert input to numeric
       lat <- as.numeric(coords$lat)
       lon <- as.numeric(coords$lng)
-      
-      # Check if inputs are valid numbers
-      if (is.na(lat) || is.na(lon)) {
-        return(NULL)  
-      }
-      
-      # Call the extract function
-      extract(`maxent_intersection2021-2040_126`, cbind(lon, lat))
+    
+      extract(`maxent_intersection2021-2040_126`, cbind(lon, lat)) 
+    })
+  
+    ### Append scores to reactive val
+    observe({
+      fut_score <- SDM_fut_overlap_score()
+      scores$SDM_fut <- as.numeric(fut_score)
     })
     
-    output$SDM_fut_overlap_score <- renderText({
+    output$SDM_fut_overlap_score_UI <- renderText({
       req(coords$lat & coords$lng)
       value <- SDM_fut_overlap_score()
       if (is.null(value) | is.na(value)){
@@ -798,6 +818,7 @@ function(input, output, session) {
       }
     })
     
+
     # Calculate site score and disease risk
     observeEvent(input$calculate_score, {
       
@@ -836,16 +857,9 @@ function(input, output, session) {
                                        ifelse(input$Geno_conf == "high_geno_conf", 3, 0)))
       score_Geno_conf <- score_Geno_conf/3
       
-      if (score_Geno_conf > 0){
-        score_Adult_genompredres <- score_Adult_genompredres * score_Geno_conf
-        score_Seedling_genompredres <- score_Seedling_genompredres * score_Geno_conf
-      }
-      
       ## If crossed out - revert score to 0
       is_disabled <- function(x) {ifelse(is.null(x), 0, x)}
       
-      if (is_disabled(input$SDM_fut_disabled) == 1) score_SDM_fut <- 0
-      if (is_disabled(input$SDM_curr_disabled) == 1) score_SDM_curr <- 0
       if (is_disabled(input$Site_DisPres_p_disabled) == 1) score_Site_DisPres <- 0
       if (is_disabled(input$Site_DisPres_p_disabled) == 1) score_Water_pres <- 0
       if (is_disabled(input$Edge_eff_p_disabled) == 1) score_Edge_eff <- 0
@@ -853,10 +867,27 @@ function(input, output, session) {
       if (is_disabled(input$Burn_severity_p_disabled) == 1) score_Burn_severity <- 0
       if (is_disabled(input$Adult_genompredres_p_disabled) == 1) score_Adult_genompredres <- 0
       if (is_disabled(input$Seedling_genompredres_p_disabled) == 1) score_Seedling_genompredres <- 0
-      if (is_disabled(input$Geno_conf_p_disabled) == 1) score_Geno_conf <- 0
+      if (is_disabled(input$Geno_conf_p_disabled) == 1) score_Geno_conf <- 1
+      
+      if (score_Geno_conf > 0){
+        score_Adult_genompredres <- score_Adult_genompredres * score_Geno_conf
+        score_Seedling_genompredres <- score_Seedling_genompredres * score_Geno_conf
+      }
+      
+      ## Save reactive Vals
+      scores$Site_DisPres <- score_Site_DisPres
+      scores$Water_pres <- score_Water_pres
+      scores$Edge_eff <- score_Edge_eff
+      scores$Time_lastburn <- score_Time_lastburn
+      scores$Burn_severity <- score_Burn_severity
+      scores$Adult_genompredres <- score_Adult_genompredres
+      scores$Seedling_genompredres <- score_Seedling_genompredres
+      scores$Geno_conf <- score_Geno_conf
       
       ## Calculate scores
-      total_score = c(score_Site_DisPres, 
+      total_score = c(scores$SDM_fut/2,
+                      scores$SDM_curr/2,
+                      score_Site_DisPres, 
                         score_Water_pres, 
                         score_Edge_eff,
                         score_Time_lastburn,
@@ -883,6 +914,7 @@ function(input, output, session) {
       
     })
     
+    observe({ print(scores) })
 #  Future current tab ######################################################################
     
     # Future current tab
@@ -971,7 +1003,7 @@ function(input, output, session) {
       
       #print(input$latitude_risk=="")
       
-      if (is.null(input$latitude_risk) || is.na(input$latitude_risk) || input$latitude_risk=="") { 
+      if (is.null(input$latitude_risk) || is.na(input$latitude_risk) || input$latitude_risk=="" || !input$calculate_score) { 
         shinyjs::hide("site_info")
       } else {
         shinyjs::show("site_info")
@@ -1105,6 +1137,8 @@ function(input, output, session) {
       colnames (data_repo) <- c("Seedlot", "Lat", "Long", "N", "Mean_score", "Sd_score")
       data_repo_df <- data.frame(data_repo)
       
+  #### Site repo
+      
       map_rep_pal <- colorNumeric("YlOrRd", domain = data_repo_df$Mean_score)
        
       if (!is.null(input$latitude_risk) && !is.na(input$longitude_risk)) { ## If user sets site 
@@ -1122,6 +1156,21 @@ function(input, output, session) {
       }
       
     })
+     
+     ## site survey text
+     observe({
+       output$SDM_fut_rep <- renderUI({if (scores$SDM_fut == 0) p("Score is disabled, unknown or zero.") else scores$SDM_fut})
+       
+       output$SDM_curr_rep <- renderUI({if (scores$SDM_curr==0) {p("Score is disabled, unknown or zero")} else {scores$SDM_curr}})
+       output$score_Site_DisPres_rep <- renderUI({if (scores$Site_DisPres==0) {p("Score is disabled, unknown or zero")} else {scores$Site_DisPres}})
+       output$score_Water_pres_rep <- renderUI({if (scores$Water_pres==0) {p("Score is disabled, unknown or zero")} else {scores$Water_pres}})
+       output$score_Edge_eff_rep <- renderUI({if (scores$Edge_eff ==0) {p("Score is disabled, unknown or zero")} else {scores$Edge_eff }})
+       output$Time_lastburn_p_rep <- renderUI({if (scores$Time_lastburn ==0) {p("Score is disabled, unknown or zero")} else {scores$Time_lastburn }})
+       output$score_Burn_severity_rep <- renderUI({if (scores$Burn_severity ==0) {p("Score is disabled, unknown or zero")} else {scores$Burn_severity }})
+       output$Adult_genompredres_p_rep <- renderUI({if (scores$Adult_genompredres ==0) {p("Score is disabled, unknown or zero")} else {scores$Adult_genompredres }})
+       output$Seedling_genompredres_p_rep <- renderUI({if (scores$Seedling_genompredres ==0) {p("Score is disabled, unknown or zero")} else {scores$Seedling_genompredres }})
+       output$Geno_conf_p_rep <- renderUI({if (scores$Geno_conf==0) {p("Score is disabled, unknown or zero")} else {scores$Geno_conf}})
+     })
      
      
 }
