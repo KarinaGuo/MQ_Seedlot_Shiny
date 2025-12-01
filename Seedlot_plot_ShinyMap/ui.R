@@ -351,7 +351,7 @@ tabPanel("Site risk",
                   hr(),
                   
                   div(style = "display:flex; flex-direction: column; align-items: center;",
-                      p(span("Risk score", uiOutput("risk_score", container = span), style = "font-weight: bold; font-size: 1em;")),
+                      p(span("Risk score", uiOutput("risk_score", container = span), " -- ", textOutput("risk_score_num", inline = TRUE), style = "font-weight: bold; font-size: 1em;")),
                       br(),
                       actionButton("calculate_score", "Generate"),
                       
@@ -439,58 +439,76 @@ tabPanel("Summary results",
              h4("Plot of seedlots selected and marker of site location"),
              leafletOutput("map_rep", height = "60vh"),
              
+             br(),hr(),br(),
+             
+             div(
+               id = "site_info_hint",
+               h4("Select a location & generate score under the site risk tab to see site information you entered")),
+             
              div(
                id = "site_info", style = "display:none;",
-               
-               br(),hr(),br(),
                
                h3("Site Information", style = "text-align:center;"),
                
                p(strong("Site selected: "), textOutput("site_name_rep",  inline = TRUE)),
-               p(strong("At location: "), textOutput("latitude_risk", inline = TRUE), textOutput("longitude_risk",  inline = TRUE)),
+               p(strong("At location: "), textOutput("latitude_risk", inline = TRUE), ",", textOutput("longitude_risk",  inline = TRUE)),
                br(),hr(),br(),
                
                h4("Survey scores and site risk recorded"),
                p(em("Hover over titles for more information", style = "text-align:center;")),
-               p(em("Press on any score to remove from calculation", style = "text-align:center;")),
                 
-               h3("Site scoring"),
+               h4("Site scoring"),
                
-               span(strong("Current SDM Overlap Score: "),  textOutput("SDM_fut_rep", inline = TRUE), "\n"),
-               span(strong("Future SDM Overlap Score (2021-2040 SSP126): "),  textOutput("score_SDM_fut", inline = TRUE)),
-               div(span(title = "Has the site been observed to have high disease presence?", strong("Site Disease presence: "), textOutput("score_Site_DisPres_rep", inline = TRUE))),
+               div(span(strong("Current SDM Overlap Score: "),  textOutput("SDM_fut_rep", inline = TRUE))),
+               div(span(strong("Future SDM Overlap Score (2021-2040 SSP126): "),  textOutput("score_SDM_fut", inline = TRUE))),
+               div(span(title = "Has the site been observed to have high disease presence?", strong("Site disease presence: "), textOutput("score_Site_DisPres_rep", inline = TRUE))),
                div(title = "Is there a source of water nearby? \n It increases relative humidity and thus renders greater MR risk", span(strong("Water body nearby? ")),textOutput("score_Water_pres_rep", inline = TRUE)),
                div(title = "Is the population fragmented and sees high people traffic? \n Fragmentation or open forest may increase spore flux", span(strong("Edge effect or/and foot traffic present? ")),textOutput("score_Edge_eff_rep", inline = TRUE)),
                div(title = "If the site was burnt recently, the population exhibits higher abiotic stress", span(strong("Time since last burnt (>2010): ")), textOutput("Time_lastburn_p_rep", inline = TRUE)),
                div(title = "How severe was the most recent burn?", span(strong("Severity of burn: ")), textOutput("score_Burn_severity", inline = TRUE)),
                
-               h3("Disease scoring"),
-               h4("Were any individuals genotyped (using DArTag)"),
+               h4("Disease scoring"),
+               h5("Were any individuals genotyped (using DArTag)?"),
                
                div(title = "If genotyping has been done across adults are there resistance alleles in the population (% resistant in lower third)", span(strong("Adult genomic prediction of resistance: ")),textOutput("Adult_genompredres_p_rep", inline = TRUE)),
                div(title = "If genotyping has been done across adults are there resistance alleles in the population (% resistant in lower third)", span(strong("Seedling genomic prediction of resistance: ")),textOutput("Seedling_genompredres_p_rep", inline = TRUE)),
                conditionalPanel(
                  condition = "any(!input.Seedling_genompredres == 'unknown_seedl_resistance', !input.Adult_genompredres == 'unknown_adult_resistance')",
-                   div(title = "How confident does the genotyping reflect the site? \n How many individuals were genotyped?", strong("Genotyping confidence: ", textOutput("Geno_conf_p_rep", inline = TRUE))),
+                   div(title = "How confident does the genotyping reflect the site? \n How many individuals were genotyped?", strong("Genotyping confidence: "), textOutput("Geno_conf_p_rep", inline = TRUE)),
                    ),
                
                h3("Final score"),
-               #span("Site risk score: ", textOutput ("risk_score", inline = TRUE))
-             ),
-    
-               
-               
-               p("Inputted survey res"),
+               p(div(span("Risk score", uiOutput("risk_score_rep", container = span)," -- ", textOutput("risk_score_num_rep", inline = TRUE), style = "font-weight: bold; font-size: 1em;"))),
                
                br(),hr(),br(),
-               # 
-               # h3("Future prediction", style = "text-align:center;"),
-               # p("Plot of intersection of future climate grid of all ssps and years"),
-               # 
-               # br(),hr(),br(),
-               # 
-               # h3("Simulations of restoration", style = "text-align:center;"),
-               # p("Plot of intersection of future climate")
+               
+               h3("Species distribution maps", style = "text-align:center;"),
+               column(12,
+                      h4("Current overlap"),
+                      leafletOutput("map_intersect_SDM_curr_repo", height = "60vh")
+               ),
+               column(6,
+                      h4("Future overlap"),
+                      leafletOutput("map_intersect_SDM_fut_repo", height = "40vh")
+               ),
+               column(6,
+                      h4("(Future - Current)"),
+                      leafletOutput("map_intersect_SDM_diff_repo", height = "40vh")
+               ),
+             ),
+             br(),hr(),br(),
+             h4("Informative Information"),
+             h3("What the different levels of resistance means and measurement"),
+             
+             p("Fill in text here"),
+             
+             br(),hr(),br()
+             
+             
+    
+
+                   
+              
                
                
                # p("Information on what the different levels of resistance means and measurement"),

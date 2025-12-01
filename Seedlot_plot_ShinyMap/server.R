@@ -780,7 +780,6 @@ function(input, output, session) {
   
     observe({
       curr_score <- as.numeric(SDM_curr_overlap_score())
-      print(curr_score[1])
       scores$SDM_curr <- as.numeric(curr_score)
     })
     
@@ -804,7 +803,7 @@ function(input, output, session) {
   
     ### Append scores to reactive val
     observe({
-      fut_score <- SDM_fut_overlap_score()
+      fut_score <- as.numeric(SDM_fut_overlap_score())
       scores$SDM_fut <- as.numeric(fut_score)
     })
     
@@ -875,18 +874,18 @@ function(input, output, session) {
       }
       
       ## Save reactive Vals
-      scores$Site_DisPres <- score_Site_DisPres
-      scores$Water_pres <- score_Water_pres
-      scores$Edge_eff <- score_Edge_eff
-      scores$Time_lastburn <- score_Time_lastburn
-      scores$Burn_severity <- score_Burn_severity
-      scores$Adult_genompredres <- score_Adult_genompredres
-      scores$Seedling_genompredres <- score_Seedling_genompredres
-      scores$Geno_conf <- score_Geno_conf
+      scores$Site_DisPres <- input$Site_DisPres
+      scores$Water_pres <- input$Water_pres
+      scores$Edge_eff <- input$Edge_eff
+      scores$Time_lastburn <- input$Time_lastburn
+      scores$Burn_severity <- input$Burn_severity
+      scores$Adult_genompredres <- input$Adult_genompredres
+      scores$Seedling_genompredres <- input$Seedling_genompredres
+      scores$Geno_conf <- input$Geno_conf
       
       ## Calculate scores
-      total_score = c(scores$SDM_fut/2,
-                      scores$SDM_curr/2,
+      total_score = c(as.numeric(scores$SDM_fut)/2,
+                      as.numeric(scores$SDM_curr)/2,
                       score_Site_DisPres, 
                         score_Water_pres, 
                         score_Edge_eff,
@@ -896,7 +895,7 @@ function(input, output, session) {
                         score_Seedling_genompredres,
                         score_Geno_conf)
       
-      score_counted <- as.numeric(sum(total_score)/sum(sum(total_score>0)))
+      score_counted <- round(as.numeric(sum(total_score)/sum(sum(total_score>0))), 3)
       score_counted_cat <- ifelse (score_counted < 0.3, "Low", 
                                    ifelse(score_counted >= 0.3 & score_counted < 0.6, "Moderate",
                                           ifelse(score_counted >= 0.6, "High", "No score available")))
@@ -911,6 +910,19 @@ function(input, output, session) {
       output$risk_score <- renderUI({
         span(score_counted_cat, style = paste0("color:", text_color, "; font-weight: bold; font-size: 1em;"))
       })
+      
+      output$risk_score_num <- renderText({
+        score_counted
+      })
+      
+      output$risk_score_rep <- renderUI({
+        span(score_counted_cat, style = paste0("color:", text_color, "; font-weight: bold; font-size: 1em;"))
+      })
+      
+      output$risk_score_num_rep <- renderText({
+        score_counted
+      })
+      
       
     })
     
@@ -1005,8 +1017,10 @@ function(input, output, session) {
       
       if (is.null(input$latitude_risk) || is.na(input$latitude_risk) || input$latitude_risk=="" || !input$calculate_score) { 
         shinyjs::hide("site_info")
+        shinyjs::show("site_info_hint")
       } else {
         shinyjs::show("site_info")
+        shinyjs::hide("site_info_hint")
       }
     })
     
@@ -1148,7 +1162,8 @@ function(input, output, session) {
         leafletProxy("map_rep") %>% 
           addCircleMarkers(data = data_repo_df, lng = ~Long, lat = ~Lat, fillColor = map_rep_pal(data_repo_df$Mean_score), color= "black", weight=1, radius = 3, popup = ~Seedlot, stroke=TRUE) %>%
           addLegend("bottomright", pal = map_rep_pal, values = data_repo_df$Mean_score, title = "Rust assay score") %>% 
-          addMarkers(lng = lon, lat = lat)
+          addMarkers(lng = lon, lat = lat) %>% 
+          setView(lng=lon, lat=lat, zoom=8)
       } else {
         leafletProxy("map_rep") %>% 
           addCircleMarkers(data = data_repo_df, lng = ~Long, lat = ~Lat, fillColor = map_rep_pal(data_repo_df$Mean_score), color= "black", weight=1, radius = 3, popup = ~Seedlot, stroke=TRUE) %>%
@@ -1156,21 +1171,124 @@ function(input, output, session) {
       }
       
     })
+
+     # Helper function to convert raw value to display text
+     
+     format_display <- function(val) {
+       if (is.null(val) || length(val) == 0) return("Unknown")
+       val <- as.character(val)
+       
+       val_lower <- tolower(val)
+       
+       if (grepl("unknown", val_lower)) return("Unknown")
+       if (grepl("mid|mod", val_lower)) return("Moderate")
+       if (grepl("low", val_lower)) return("Low")
+       if (grepl("high", val_lower)) return("High")
+       if (grepl("pres", val_lower)) return("Present")
+       if (grepl("notpres", val_lower)) return("Not present")
+       if (grepl("no burn", val_lower)) return("Not burnt")
+       
+       num_val <- suppressWarnings(as.numeric(val))
+       if (!is.na(num_val)) return(round(num_val, 3))
+       
+       return(val)
+     }
      
      ## site survey text
      observe({
-       output$SDM_fut_rep <- renderUI({if (scores$SDM_fut == 0) p("Score is disabled, unknown or zero.") else scores$SDM_fut})
-       
-       output$SDM_curr_rep <- renderUI({if (scores$SDM_curr==0) {p("Score is disabled, unknown or zero")} else {scores$SDM_curr}})
-       output$score_Site_DisPres_rep <- renderUI({if (scores$Site_DisPres==0) {p("Score is disabled, unknown or zero")} else {scores$Site_DisPres}})
-       output$score_Water_pres_rep <- renderUI({if (scores$Water_pres==0) {p("Score is disabled, unknown or zero")} else {scores$Water_pres}})
-       output$score_Edge_eff_rep <- renderUI({if (scores$Edge_eff ==0) {p("Score is disabled, unknown or zero")} else {scores$Edge_eff }})
-       output$Time_lastburn_p_rep <- renderUI({if (scores$Time_lastburn ==0) {p("Score is disabled, unknown or zero")} else {scores$Time_lastburn }})
-       output$score_Burn_severity_rep <- renderUI({if (scores$Burn_severity ==0) {p("Score is disabled, unknown or zero")} else {scores$Burn_severity }})
-       output$Adult_genompredres_p_rep <- renderUI({if (scores$Adult_genompredres ==0) {p("Score is disabled, unknown or zero")} else {scores$Adult_genompredres }})
-       output$Seedling_genompredres_p_rep <- renderUI({if (scores$Seedling_genompredres ==0) {p("Score is disabled, unknown or zero")} else {scores$Seedling_genompredres }})
-       output$Geno_conf_p_rep <- renderUI({if (scores$Geno_conf==0) {p("Score is disabled, unknown or zero")} else {scores$Geno_conf}})
+       output$SDM_fut_rep <- renderText(round(scores$SDM_fut,3))
+       output$SDM_curr_rep <- renderText(round(scores$SDM_curr,3))
+       output$score_Site_DisPres_rep <- renderText(format_display(scores$Site_DisPres))
+       output$score_Water_pres_rep <- renderText(format_display(scores$Water_pres))
+       output$score_Edge_eff_rep <- renderText(format_display(scores$Edge_eff))
+       output$Time_lastburn_p_rep <- renderText(format_display(scores$Time_lastburn))
+       output$score_Burn_severity_rep <- renderText(format_display(scores$Burn_severity))
+       output$Adult_genompredres_p_rep <- renderText(format_display(scores$Adult_genompredres))
+       output$Seedling_genompredres_p_rep <- renderText(format_display(scores$Seedling_genompredres))
+       output$Geno_conf_p_rep <- renderText(format_display(scores$Geno_conf))
      })
      
+   ### Map of current and future intersection SDMs
+     observe({
+       output$map_intersect_SDM_curr_repo <- renderLeaflet({
+         selected_raster_rep <- `maxent_intersection`
+         vals <- as.numeric(values(selected_raster_rep))
+         color_pal_rep <- colorNumeric(palette = pal_int(20), domain = vals, na.color = "transparent")
+         
+         leaflet() %>%
+           addTiles() %>%
+           #setView(lng=151.20990, lat=-33.865143, zoom=8) %>% 
+           addPolygons(data = maxent_studyarea, color = "black", weight = 1, fill = FALSE, group = "Outline") %>% 
+           addRasterImage(selected_raster_rep, colors = color_pal_rep, opacity = 0.5, group = input$layer_curr_rep) %>% 
+           addLegend(position = "topright", pal = color_pal_rep, values = vals, title = "SDM value", group = input$layer_curr_rep)
+       })
+       
+       output$map_intersect_SDM_fut_repo <- renderLeaflet({
+         selected_raster_futrep <- `maxent_intersection2021-2040_126`
+         vals <- as.numeric(values(selected_raster_futrep))
+         color_pal_futrep <- colorNumeric(palette = pal_int(20), domain = vals, na.color = "transparent")
+         
+         leaflet() %>%
+           addTiles() %>%
+           addPolygons(data = maxent_studyarea, color = "black", weight = 1, fill = FALSE, group = "Outline") %>%
+           addRasterImage(selected_raster_futrep, colors = color_pal_futrep, opacity = 0.5, group = input$layer_fut_rep) %>%
+           addLegend(position = "topright", pal = color_pal_futrep, values = vals, title = "SDM value", group = input$layer_fut_rep)
+         #setView(lng = 151.20990, lat = -33.865143, zoom = 8) 
+       })
+       
+       output$map_intersect_SDM_diff_repo <- renderLeaflet({
+         selected_raster_futrep <- `maxent_intersection2021-2040_126`
+         selected_raster_rep <- `maxent_intersection`
+         selected_raster_diff <- selected_raster_futrep - selected_raster_rep
+         
+         pal_int_fut <- colorRampPalette(c('#261323', 'deeppink4', "white", "darkolivegreen", "#1b2613"))
+         color_pal_fut <- colorNumeric(palette = pal_int_fut(20), domain = c(-1.3,1.2), na.color = "transparent") # Range set with biggest diff observed, manually set for static color scale
+         
+         leaflet() %>%
+           addTiles() %>%
+           addPolygons(data = maxent_studyarea, color = "black", weight = 1, fill = FALSE, group = "Outline") %>%
+           addRasterImage(selected_raster_diff, colors = color_pal_fut, opacity = 0.5, group = input$layer_fut_diff) %>%
+           addLegend(position = "topright", pal = color_pal_fut, values = c(-.71,1.2), title = "Difference", group = input$layer_fut_diff) 
+         #setView(lng = 151.20990, lat = -33.865143, zoom = 8) 
+       })
+     })
+     
+     observe({
+      
+       cat(!is.null(input$latitude_risk) && !is.na(input$longitude_risk))
+       if (!is.null(input$latitude_risk) && !is.na(input$longitude_risk)) { ## If user sets site 
+         lat <- as.numeric(input$latitude_risk)
+         lon <- as.numeric(input$longitude_risk)
+         
+         session$onFlushed(function() {
+           leafletProxy("map_intersect_SDM_fut_repo") %>% 
+           clearGroup("Repo marker") %>% 
+           addCircleMarkers(
+             lng = lon,
+             lat = lat,
+             group = "Repo marker"
+           ) %>% 
+           setView(lng=lon, lat=lat, zoom=8)
+         
+         leafletProxy("map_intersect_SDM_curr_repo")  %>% 
+           clearGroup("Repo marker") %>% 
+           addCircleMarkers(
+             lng = lon,
+             lat = lat,
+             group = "Repo marker") %>% 
+           setView(lng=lon, lat=lat, zoom=8)
+         
+         leafletProxy("map_intersect_SDM_diff_repo")  %>% 
+           clearGroup("Repo marker") %>% 
+           addCircleMarkers(
+             lng = lon,
+             lat = lat,
+             group = "Repo marker") %>% 
+           setView(lng=lon, lat=lat, zoom=8)
+         
+         }, once = TRUE)
+       }
+       ignoreInit = FALSE
+     })
      
 }
