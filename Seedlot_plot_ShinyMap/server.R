@@ -1237,7 +1237,7 @@ function(input, output, session) {
        list(
          src = image_filename_base,
          contentType = 'image/jpeg',
-         width = 600,
+         width = 900,
          height = 600
        )
      }, deleteFile = FALSE)

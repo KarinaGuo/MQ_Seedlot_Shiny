@@ -442,7 +442,7 @@ tabPanel("Summary results",
              br(),hr(),br(),
              
              h4("Simulated response at different MR pressures"),
-             imageOutput("image_sim_base", width = "600px", height = "400px"),
+             imageOutput("image_sim_base", width = "700px", height = "600px"),
              
              br(),hr(),br(),
              
