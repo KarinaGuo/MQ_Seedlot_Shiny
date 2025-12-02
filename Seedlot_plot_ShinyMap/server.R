@@ -14,6 +14,8 @@ library(htmlwidgets) # Extra additions for UI (html)
 library(tidyverse) # Data wrangling
 library(ggridges) # GGplot geom ridges
 library(plotly) # Plot output
+library(imager) # Plot images
+
 
 setwd("~/Uni/Doctorate/Ch Seedlot_plot_data/")
 
@@ -694,7 +696,7 @@ function(input, output, session) {
     )
     
     latest_coords <- reactiveVal(list(lat = NA, lng = NA))
-    
+    risk_score_calculated <- reactiveValues(score = NULL) 
     
     ## Add click and point map 
     
@@ -775,7 +777,7 @@ function(input, output, session) {
       lat <- as.numeric(coords$lat)
       lon <- as.numeric(coords$lng)
       
-      extract(maxent_intersection, cbind(lon, lat)) 
+      raster::extract(maxent_intersection, cbind(lon, lat)) 
       })
   
     observe({
@@ -797,13 +799,15 @@ function(input, output, session) {
       # Convert input to numeric
       lat <- as.numeric(coords$lat)
       lon <- as.numeric(coords$lng)
-    
-      extract(`maxent_intersection2021-2040_126`, cbind(lon, lat)) 
+      
+      raster::extract(`maxent_intersection2021-2040_126`, cbind(lon, lat)) 
     })
   
     ### Append scores to reactive val
     observe({
+      req(coords$lat, coords$lng)
       fut_score <- as.numeric(SDM_fut_overlap_score())
+      
       scores$SDM_fut <- as.numeric(fut_score)
     })
     
@@ -907,6 +911,8 @@ function(input, output, session) {
                            "black") # Default color if "No score available"
       
       # Return the text wrapped in HTML with the color applied
+      risk_score_calculated$score <- score_counted_cat
+      
       output$risk_score <- renderUI({
         span(score_counted_cat, style = paste0("color:", text_color, "; font-weight: bold; font-size: 1em;"))
       })
@@ -922,11 +928,8 @@ function(input, output, session) {
       output$risk_score_num_rep <- renderText({
         score_counted
       })
-      
-      
     })
     
-    observe({ print(scores) })
 #  Future current tab ######################################################################
     
     # Future current tab
@@ -1208,6 +1211,59 @@ function(input, output, session) {
        output$Geno_conf_p_rep <- renderText(format_display(scores$Geno_conf))
      })
      
+   ### Simulations
+     # Calculate mean once
+     mean_score <- reactive({
+       mean(selected_seedlot_genompred_score_allrepo()$Seedling_score_genompred)
+     })
+     
+     # Base image reactive
+     output$image_sim_base <- renderImage({
+       req(mean_score())
+       
+       MR_rest <- ifelse(
+         mean_score() < 0.3, "Highrest",
+         ifelse(mean_score() < 0.6, "Midrest", "Lowrest")
+       )
+       
+       image_filename_base <- switch(
+         MR_rest,
+         "Highrest"   = "~/Uni/Doctorate/Ch Natural selection/Simulation/ShinyAppRuns/High_rest_baseplot.jpg",
+         "Midrest"    = "~/Uni/Doctorate/Ch Natural selection/Simulation/ShinyAppRuns/Mid_rest_baseplot.jpg",
+         "Lowrest"    = "~/Uni/Doctorate/Ch Natural selection/Simulation/ShinyAppRuns/Low_rest_baseplot.jpg",
+         NULL
+       )
+       
+       list(
+         src = image_filename_base,
+         contentType = 'image/jpeg',
+         width = 600,
+         height = 600
+       )
+     }, deleteFile = FALSE)
+     
+     # Rest image reactive
+     output$image_sim_rest <- renderImage({
+       req(risk_score_calculated$score)
+       req(mean_score())
+       
+       image_filename_rest <- switch(
+         risk_score_calculated$score,
+         "High" = "~/Uni/Doctorate/Ch Natural selection/Simulation/ShinyAppRuns/lowrest_high_MR_variednumb.jpg",
+         "Mid"  = "~/Uni/Doctorate/Ch Natural selection/Simulation/ShinyAppRuns/lowrest_mid_MR_variednumb.jpg",
+         "Low"  = "~/Uni/Doctorate/Ch Natural selection/Simulation/ShinyAppRuns/lowrest_low_MR_variednumb.jpg",
+         NULL
+       )
+       
+       list(
+         src = image_filename_rest,
+         contentType = 'image/jpeg',
+         width = 600,
+         height = 600
+       )
+     }, deleteFile = FALSE)
+     
+    
    ### Map of current and future intersection SDMs
      observe({
        output$map_intersect_SDM_curr_repo <- renderLeaflet({

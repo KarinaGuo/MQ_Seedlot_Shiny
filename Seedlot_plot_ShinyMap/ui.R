@@ -441,6 +441,11 @@ tabPanel("Summary results",
              
              br(),hr(),br(),
              
+             h4("Simulated response at different MR pressures"),
+             imageOutput("image_sim_base", width = "600px", height = "400px"),
+             
+             br(),hr(),br(),
+             
              div(
                id = "site_info_hint",
                h4("Select a location & generate score under the site risk tab to see site information you entered")),
@@ -495,8 +500,16 @@ tabPanel("Summary results",
                       h4("(Future - Current)"),
                       leafletOutput("map_intersect_SDM_diff_repo", height = "40vh")
                ),
+               
+               column(12, br(),hr(),br(),
+               
+               h4("Simulated response given calculated site disease risk"),
+               imageOutput("image_sim_rest", width = "600px", height = "400px"),
+               ),
              ),
+             
              br(),hr(),br(),
+             
              h4("Informative Information"),
              h3("What the different levels of resistance means and measurement"),
              
