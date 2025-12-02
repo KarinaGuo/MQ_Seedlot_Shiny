@@ -78,7 +78,7 @@ function(input, output, session) {
   
   # Set initial render
   # Track the first visit to the tab 
-  first_visit <- reactiveVal(TRUE) 
+  first_visit <- reactiveVal(TRUE)
   
   ## Marker images
   # For circle markers
@@ -886,7 +886,7 @@ function(input, output, session) {
       scores$Adult_genompredres <- input$Adult_genompredres
       scores$Seedling_genompredres <- input$Seedling_genompredres
       scores$Geno_conf <- input$Geno_conf
-      
+      cat(scores)
       ## Calculate scores
       total_score = c(as.numeric(scores$SDM_fut)/2,
                       as.numeric(scores$SDM_curr)/2,
@@ -1282,6 +1282,7 @@ function(input, output, session) {
        output$map_intersect_SDM_fut_repo <- renderLeaflet({
          selected_raster_futrep <- `maxent_intersection2021-2040_126`
          vals <- as.numeric(values(selected_raster_futrep))
+         
          color_pal_futrep <- colorNumeric(palette = pal_int(20), domain = vals, na.color = "transparent")
          
          leaflet() %>%
@@ -1310,41 +1311,45 @@ function(input, output, session) {
      })
      
      observe({
-      
-       cat(!is.null(input$latitude_risk) && !is.na(input$longitude_risk))
-       if (!is.null(input$latitude_risk) && !is.na(input$longitude_risk)) { ## If user sets site 
-         lat <- as.numeric(input$latitude_risk)
-         lon <- as.numeric(input$longitude_risk)
+       req(input$latitude_risk, input$longitude_risk)  # ensure inputs exist
+       
+       lat <- as.numeric(input$latitude_risk)
+       lon <- as.numeric(input$longitude_risk)
+       
+       output_ready <- reactiveVal(FALSE)
+       
+       observeEvent(input$map_intersect_SDM_fut_repo_bounds, {  # map has rendered
+         output_ready(TRUE)
+       }, once = TRUE)
+       
+       observe({
+         req(output_ready())
          
-         session$onFlushed(function() {
-           leafletProxy("map_intersect_SDM_fut_repo") %>% 
-           clearGroup("Repo marker") %>% 
+         leafletProxy("map_intersect_SDM_fut_repo") %>%
+           clearGroup("Repo marker") %>%
            addCircleMarkers(
-             lng = lon,
-             lat = lat,
+             lng = lon, lat = lat, radius = 5, stroke = F, fillOpacity = .5,
              group = "Repo marker"
-           ) %>% 
-           setView(lng=lon, lat=lat, zoom=8)
+           ) %>%
+           setView(lng = lon, lat = lat, zoom = 8)
          
+           ##
          leafletProxy("map_intersect_SDM_curr_repo")  %>% 
            clearGroup("Repo marker") %>% 
            addCircleMarkers(
-             lng = lon,
-             lat = lat,
+             lng = lon, lat = lat, radius = 5, stroke = F, fillOpacity = .5,
              group = "Repo marker") %>% 
-           setView(lng=lon, lat=lat, zoom=8)
+           setView(lng=lon, lat=lat, zoom=8) 
          
+         ##
          leafletProxy("map_intersect_SDM_diff_repo")  %>% 
            clearGroup("Repo marker") %>% 
            addCircleMarkers(
-             lng = lon,
-             lat = lat,
+             lng = lon, lat = lat, radius = 5, stroke = F, fillOpacity = .5,
              group = "Repo marker") %>% 
            setView(lng=lon, lat=lat, zoom=8)
          
-         }, once = TRUE)
-       }
-       ignoreInit = FALSE
-     })
+         })
+       })
      
 }
